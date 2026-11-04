@@ -320,6 +320,37 @@ bool omitsDisabledDebugArtifacts()
         "omitsDisabledDebugArtifacts"
     );
 }
+
+bool sharesTotpAcrossProtocolsAndCredentialTransports()
+{
+    for (const QString &protocol : {QString("atrust"), QString("easyconnect")})
+    {
+        for (const bool asArguments : {false, true})
+        {
+            for (const QString &secret : {QString(), QString("shared-totp-secret")})
+            {
+                ConnectionProfile profile;
+                profile.endpoint.protocol = protocol;
+                profile.credentials.passAsArguments = asArguments;
+                profile.credentials.totpSecret = secret;
+                const CoreCommand command = CoreCommandBuilder::build(profile);
+                const int option = command.arguments.indexOf("-totp-secret");
+                const bool hasArgument = option >= 0;
+                const bool hasEnvironment = command.environmentVariables.contains("ZJU_CONNECT_TOTP_SECRET");
+                if (hasArgument != (asArguments && !secret.isEmpty())
+                    || hasEnvironment != (!asArguments && !secret.isEmpty())
+                    || (hasArgument && command.arguments.value(option + 1) != secret)
+                    || (hasEnvironment && command.environmentVariables.value("ZJU_CONNECT_TOTP_SECRET") != secret)
+                    || (!secret.isEmpty() && command.loggableCommandLine().contains(secret)))
+                {
+                    qCritical() << "TOTP transport mismatch" << protocol << asArguments;
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
+}
 }
 
 int main(int argc, char *argv[])
@@ -335,6 +366,7 @@ int main(int argc, char *argv[])
         && passesCredentialsAsArgumentsWhenEnabled()
         && clearsManagedVariablesEvenWhenCredentialsAreEmpty()
         && quotesLoggableArgumentsWithoutChangingArguments()
-        && omitsDisabledDebugArtifacts();
+        && omitsDisabledDebugArtifacts()
+        && sharesTotpAcrossProtocolsAndCredentialTransports();
     return passed ? 0 : 1;
 }

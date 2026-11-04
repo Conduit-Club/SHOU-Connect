@@ -1,88 +1,55 @@
 #include "coreoutputparser.h"
 
+namespace
+{
+struct OutputRule
+{
+    const char *text;
+    CoreOutputEvent event;
+    bool interactive;
+    Qt::CaseSensitivity caseSensitivity = Qt::CaseSensitive;
+};
+
+// Keep prompt recognition and no-newline buffer flushing in sync. Order preserves
+// the existing first-match priority, including prompts before error messages.
+const OutputRule rules[]{
+    {"SUDO_ASK_PASS", CoreOutputEvent::AskSudoPassword, true},
+    {"Graph check code saved to ", CoreOutputEvent::GraphCaptcha, false},
+    {"Please enter the graph check code JSON:", CoreOutputEvent::GraphCaptcha, true},
+    {"Please enter the SMS verification code:", CoreOutputEvent::SmsCodeWithSkipOption, true},
+    {"Please enter your SMS code:", CoreOutputEvent::SmsCode, true},
+    {"Please enter your TOTP code:", CoreOutputEvent::TotpCode, true},
+    {"Please enter the TOTP token:", CoreOutputEvent::TotpCode, true},
+    {"Please enter rand code:", CoreOutputEvent::RandCode, true},
+    {"Please enter the RADIUS token:", CoreOutputEvent::RadiusCodeWithSkipOption, true},
+    {"Please enter the callback url:", CoreOutputEvent::SsoCallback, true, Qt::CaseInsensitive},
+    {"VPN client started", CoreOutputEvent::ClientStarted, false},
+    {"graph check code still required after second login attempt", CoreOutputEvent::CaptchaFailed, false},
+    {"The characters are incorrect or has expired!", CoreOutputEvent::CaptchaFailed, false},
+    {"Access is denied.", CoreOutputEvent::AccessDenied, false},
+    {"listen failed", CoreOutputEvent::ListenFailed, false},
+    {"Invalid username or password!", CoreOutputEvent::InvalidCredentials, false},
+    {"ticket is empty", CoreOutputEvent::InvalidCredentials, false},
+    {"You are trying brute-force login on this IP address.", CoreOutputEvent::BruteForceBlocked, false},
+    {"Login failed", CoreOutputEvent::LoginFailed, false},
+    {"too many login failures", CoreOutputEvent::LoginFailed, false},
+    {"unexpected newline", CoreOutputEvent::InteractiveError, false},
+    {"auth type/login domain combination not found", CoreOutputEvent::AuthNotAvailable, false},
+    {"invalid SID", CoreOutputEvent::AuthExpired, false},
+    {"l3-tunnel tunnel auth failed:", CoreOutputEvent::AuthExpired, false},
+    {"client setup error", CoreOutputEvent::ClientFailed, false},
+    {"panic", CoreOutputEvent::CorePanic, false},
+};
+}
+
 CoreOutputEvent CoreOutputParser::parse(const QString &output)
 {
-    if (output.contains("SUDO_ASK_PASS"))
+    for (const OutputRule &rule : rules)
     {
-        return CoreOutputEvent::AskSudoPassword;
-    }
-    if (output.contains("Graph check code saved to "))
-    {
-        return CoreOutputEvent::GraphCaptcha;
-    }
-    if (output.contains("Please enter the SMS verification code: "))
-    {
-        return CoreOutputEvent::SmsCodeWithSkipOption;
-    }
-    if (output.contains("Please enter your SMS code:"))
-    {
-        return CoreOutputEvent::SmsCode;
-    }
-    if (output.contains("Please enter your TOTP code:"))
-    {
-        return CoreOutputEvent::TotpCode;
-    }
-    if (output.contains("Please enter rand code:"))
-    {
-        return CoreOutputEvent::RandCode;
-    }
-    // aTrust RADIUS Access-Challenge：核心在密码认证后输出此提示并等待用户输入短信验证码。
-    if (output.contains("Please enter the RADIUS token:"))
-    {
-        return CoreOutputEvent::RadiusCodeWithSkipOption;
-    }
-    if (output.contains("Please enter the callback url:"))
-    {
-        return CoreOutputEvent::SsoCallback;
-    }
-    if (output.contains("VPN client started"))
-    {
-        return CoreOutputEvent::ClientStarted;
-    }
-    if (output.contains("graph check code still required after second login attempt") ||
-        output.contains("The characters are incorrect or has expired!"))
-    {
-        return CoreOutputEvent::CaptchaFailed;
-    }
-    if (output.contains("Access is denied."))
-    {
-        return CoreOutputEvent::AccessDenied;
-    }
-    if (output.contains("listen failed"))
-    {
-        return CoreOutputEvent::ListenFailed;
-    }
-    if (output.contains("Invalid username or password!") || output.contains("ticket is empty"))
-    {
-        return CoreOutputEvent::InvalidCredentials;
-    }
-    if (output.contains("You are trying brute-force login on this IP address."))
-    {
-        return CoreOutputEvent::BruteForceBlocked;
-    }
-    if (output.contains("Login failed") || output.contains("too many login failures"))
-    {
-        return CoreOutputEvent::LoginFailed;
-    }
-    if (output.contains("unexpected newline"))
-    {
-        return CoreOutputEvent::InteractiveError;
-    }
-    if (output.contains("auth type/login domain combination not found"))
-    {
-        return CoreOutputEvent::AuthNotAvailable;
-    }
-    if (output.contains("invalid SID") || output.contains("l3-tunnel tunnel auth failed:"))
-    {
-        return CoreOutputEvent::AuthExpired;
-    }
-    if (output.contains("client setup error"))
-    {
-        return CoreOutputEvent::ClientFailed;
-    }
-    if (output.contains("panic"))
-    {
-        return CoreOutputEvent::CorePanic;
+        if (output.contains(QLatin1String(rule.text), rule.caseSensitivity))
+        {
+            return rule.event;
+        }
     }
     return CoreOutputEvent::None;
 }
@@ -101,11 +68,13 @@ QString CoreOutputParser::graphCaptchaFile(const QString &output)
 
 bool CoreOutputParser::hasInteractivePrompt(const QByteArray &output)
 {
-    return output.contains("SUDO_ASK_PASS")
-           || output.contains("Please enter the SMS verification code: ")
-           || output.contains("Please enter your SMS code:")
-           || output.contains("Please enter your TOTP code:")
-           || output.contains("Please enter rand code:")
-           || output.contains("Please enter the RADIUS token:")
-           || output.contains("Please enter the callback url:");
+    const QString text = QString::fromUtf8(output);
+    for (const OutputRule &rule : rules)
+    {
+        if (rule.interactive && text.contains(QLatin1String(rule.text), rule.caseSensitivity))
+        {
+            return true;
+        }
+    }
+    return false;
 }

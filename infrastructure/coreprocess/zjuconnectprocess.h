@@ -31,6 +31,7 @@ private:
     QProcess *zjuConnectProcess;
 
     QTemporaryDir *tempDir = nullptr;
+    QString graphCodeFile;
 
     CoreOutputBuffer standardOutputBuffer;
     CoreOutputBuffer standardErrorBuffer;

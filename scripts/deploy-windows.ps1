@@ -9,35 +9,33 @@ param(
     [string]$Nightly = "false"
 )
 
-Import-Module -Name Microsoft.PowerShell.Utility
-
-# Create output directory
-New-Item -ItemType Directory -Path "$DisplayName" -Force
-Push-Location "$DisplayName"
-
-# Copy executable
-Copy-Item -Path "../$BuildDir/Release/$TargetName.exe" -Destination .
-
-# Run windeployqt
-& windeployqt.exe "$TargetName.exe"
-
-# Download and extract zju-connect
-$ZjuReleasePath = if ($Nightly -eq "true") { "download/nightly" } else { "latest/download" }
-$ZjuUrl = "https://github.com/Mythologyli/zju-connect/releases/$ZjuReleasePath/zju-connect-windows-$Architecture.zip"
-$ZjuZipPath = "zju-connect-windows-$Architecture.zip"
-Invoke-WebRequest -Uri $ZjuUrl -OutFile $ZjuZipPath
-Expand-Archive -Path $ZjuZipPath -DestinationPath . -Force
-Remove-Item -Path $ZjuZipPath
-
-# Copy additional files
-Copy-Item -Path "../libs/wintun/bin/$Architecture/wintun.dll" -Destination .
-Copy-Item -Path "../resource/qt.conf" -Destination .
-
-# Remove vc_redist executable
-if ($Architecture -eq "amd64") {
-    Remove-Item -Path vc_redist.x64.exe -ErrorAction SilentlyContinue
-} else {
-    Remove-Item -Path vc_redist.arm64.exe -ErrorAction SilentlyContinue
+$ErrorActionPreference = 'Stop'
+$workspacePath = (Get-Location).Path
+$deploymentPath = [IO.Path]::GetFullPath((Join-Path $workspacePath $DisplayName))
+if (-not $deploymentPath.StartsWith($workspacePath + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'Deployment directory must be inside the workspace.'
 }
-
-Pop-Location
+if (Test-Path -LiteralPath $deploymentPath) {
+    throw "Deployment directory already exists; use a fresh workspace: $deploymentPath"
+}
+New-Item -ItemType Directory -Path $deploymentPath | Out-Null
+$toolsPath = Join-Path $PSScriptRoot 'package_tools.py'
+Copy-Item -LiteralPath "$BuildDir/Release/$TargetName.exe" -Destination $deploymentPath
+Push-Location -LiteralPath $deploymentPath
+try {
+    & windeployqt.exe --release --translations 'zh_CN,zh_TW,en' --skip-plugin-types qmltooling "$TargetName.exe"
+    if ($LASTEXITCODE -ne 0) { throw 'windeployqt failed' }
+    $coreOptions = @($toolsPath, 'fetch-core', '.', '--platform', 'windows', '--architecture', $Architecture)
+    if ($Nightly -eq 'true') { $coreOptions += '--nightly' }
+    & python @coreOptions
+    if ($LASTEXITCODE -ne 0) { throw 'Core download failed' }
+    Copy-Item -LiteralPath "$workspacePath/libs/wintun/bin/$Architecture/wintun.dll" -Destination .
+    Copy-Item -LiteralPath "$workspacePath/resource/qt.conf" -Destination .
+    # Portable archives retain the existing documented VC Redistributable prerequisite.
+    $runtimeInstaller = if ($Architecture -eq 'amd64') { 'vc_redist.x64.exe' } else { 'vc_redist.arm64.exe' }
+    if (Test-Path -LiteralPath $runtimeInstaller) { Remove-Item -LiteralPath $runtimeInstaller }
+    & python $toolsPath prune . --output "$workspacePath/package-pruning.json"
+    if ($LASTEXITCODE -ne 0) { throw 'Package pruning failed' }
+} finally {
+    Pop-Location
+}

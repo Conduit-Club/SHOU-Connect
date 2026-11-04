@@ -1,6 +1,11 @@
 #include <QApplication>
+#include <QCheckBox>
 #include <QDebug>
 #include <QLineEdit>
+#include <QList>
+#include <QPair>
+#include <QRadioButton>
+#include <QSpinBox>
 #include <QSettings>
 #include <QStackedWidget>
 #include <QTemporaryDir>
@@ -138,7 +143,7 @@ bool savesCertificateCredentials(const QString &settingsPath)
     );
     QLineEdit *certificateTotp = lineEdit(
         dialog,
-        "guideCertificateTotpSecretLineEdit"
+        "guideTotpSecretLineEdit"
     );
     if (pages == nullptr || certificateFile == nullptr
         || certificatePassword == nullptr || certificateTotp == nullptr)
@@ -187,6 +192,111 @@ bool showsSsoWithoutCredentialFields(const QString &settingsPath)
     }
     return passed;
 }
+
+bool sharesTotpAcrossAuthenticationMethods(const QString &directory)
+{
+    const QList<QPair<QString, QString>> methods{
+        {"easyconnect", "password"}, {"easyconnect", "certificate"},
+        {"atrust", "psw"}, {"atrust", "smsCheckCode"},
+        {"atrust", "cas"}, {"atrust", "httpsOauth2"}
+    };
+    for (const auto &method : methods)
+    {
+        const QString path = directory + "/" + method.first + "-" + method.second + ".ini";
+        QSettings settings(path, QSettings::IniFormat);
+        settings.setValue("SHOUConnect/Protocol", method.first);
+        settings.setValue("SHOUConnect/AuthType", method.second);
+        settings.setValue("SHOUConnect/EasyConnectAuthType", method.second);
+        settings.setValue("Credential/TOTPSecret", "legacy-secret");
+        ConfigurationGuideDialog dialog(nullptr, &settings);
+        auto *totp = lineEdit(dialog, "guideTotpSecretLineEdit");
+        auto *credentials = credentialPages(dialog);
+        auto *show = dialog.findChild<QCheckBox *>("guideTotpSecretVisibleCheckBox");
+        auto *atrust = dialog.findChild<QRadioButton *>("guideAtrustRadioButton");
+        auto *easyconnect = dialog.findChild<QRadioButton *>("guideEasyconnectRadioButton");
+        if (!totp || !credentials || !show || !atrust || !easyconnect
+            || credentials->isAncestorOf(totp) || !totp->isEnabled()
+            || totp->text() != "legacy-secret" || totp->echoMode() != QLineEdit::Password
+            || dialog.findChild<QLineEdit *>("guideCertificateTotpSecretLineEdit"))
+        {
+            qCritical() << "TOTP is not shared for" << method;
+            return false;
+        }
+        // Show the credentials step and check actual visibility for SSO/SMS too.
+        auto *steps = qobject_cast<QStackedWidget *>(credentials->parentWidget()->parentWidget());
+        if (!steps)
+            return false;
+        steps->setCurrentWidget(credentials->parentWidget());
+        dialog.show();
+        if (!totp->isVisible())
+            return false;
+        show->setChecked(true);
+        if (totp->echoMode() != QLineEdit::Normal)
+            return false;
+        show->setChecked(false);
+        totp->setText("  shared-secret  ");
+        easyconnect->setChecked(true);
+        atrust->setChecked(true);
+        easyconnect->setChecked(method.first == "easyconnect");
+        if (totp->text() != "  shared-secret  " || !totp->isEnabled()
+            || totp->echoMode() != QLineEdit::Password)
+            return false;
+        dialog.applyTo(settings);
+        QSettings reloaded(path, QSettings::IniFormat);
+        if (reloaded.value("Credential/TOTPSecret") != "shared-secret")
+            return false;
+
+        totp->clear();
+        dialog.applyTo(settings);
+        if (!settings.value("Credential/TOTPSecret").toString().isEmpty())
+            return false;
+        settings.setValue("Credential/TOTPSecret", "keep-on-cancel");
+        totp->setText("unsaved");
+        dialog.reject();
+        if (settings.value("Credential/TOTPSecret") != "keep-on-cancel")
+            return false;
+    }
+    return true;
+}
+
+bool keepsProfileSecretsSeparate(const QString &directory)
+{
+    QSettings first(directory + "/first.ini", QSettings::IniFormat);
+    QSettings second(directory + "/second.ini", QSettings::IniFormat);
+    first.setValue("Credential/TOTPSecret", "first-secret");
+    second.setValue("Credential/TOTPSecret", "second-secret");
+    ConfigurationGuideDialog dialog(nullptr, &first);
+    lineEdit(dialog, "guideTotpSecretLineEdit")->setText("updated-first");
+    dialog.applyTo(first);
+    ConfigurationGuideDialog other(nullptr, &second);
+    return first.value("Credential/TOTPSecret") == "updated-first"
+        && lineEdit(other, "guideTotpSecretLineEdit")->text() == "second-secret"
+        && second.value("Credential/TOTPSecret") == "second-secret";
+}
+
+bool defaultsToSchoolCasAndInvalidatesOnServerChange(const QString &directory)
+{
+    QSettings settings(directory + "/school.ini", QSettings::IniFormat);
+    ConfigurationGuideDialog dialog(nullptr, &settings);
+    auto *server = lineEdit(dialog, "guideServerAddressLineEdit");
+    auto *port = dialog.findChild<QSpinBox *>("guideServerPortSpinBox");
+    auto *atrust = dialog.findChild<QRadioButton *>("guideAtrustRadioButton");
+    if (!server || !port || !atrust || !atrust->isChecked()
+        || server->text() != "vpn.shou.edu.cn" || port->value() != 443)
+        return false;
+    dialog.applyTo(settings);
+    if (settings.value("SHOUConnect/Protocol") != "atrust"
+        || settings.value("SHOUConnect/AuthType") != "cas"
+        || settings.value("SHOUConnect/LoginDomain") != "cas07533"
+        || !settings.value("SHOUConnect/LoginURL").toString().contains("cas07533"))
+        return false;
+    server->setText("another.example.edu");
+    QMetaObject::invokeMethod(server, "editingFinished");
+    dialog.applyTo(settings);
+    return settings.value("SHOUConnect/AuthType").toString().isEmpty()
+        && settings.value("SHOUConnect/LoginDomain").toString().isEmpty()
+        && settings.value("SHOUConnect/LoginURL").toString().isEmpty();
+}
 }
 
 int main(int argc, char *argv[])
@@ -203,6 +313,9 @@ int main(int argc, char *argv[])
         savesPasswordCredentials(directory.filePath("password.ini"))
         && savesSmsCredentials(directory.filePath("sms.ini"))
         && savesCertificateCredentials(directory.filePath("certificate.ini"))
-        && showsSsoWithoutCredentialFields(directory.filePath("sso.ini"));
+        && showsSsoWithoutCredentialFields(directory.filePath("sso.ini"))
+        && sharesTotpAcrossAuthenticationMethods(directory.path())
+        && keepsProfileSecretsSeparate(directory.path())
+        && defaultsToSchoolCasAndInvalidatesOnServerChange(directory.path());
     return passed ? 0 : 1;
 }

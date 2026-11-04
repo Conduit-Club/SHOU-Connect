@@ -81,10 +81,10 @@ jobs:
         run: |
           mkdir build
           if ( [bool]::Parse("${{ env.NIGHTLY_BUILD }}") ) {
-            cmake -DNIGHTLY_BUILD=ON -DQT_DEBUG_FIND_PACKAGE=ON -DGIT_HASH="$(git rev-parse --short=7 HEAD)" -DCMAKE_BUILD_TYPE=Release -S . -B build
+            cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DNIGHTLY_BUILD=ON -DQT_DEBUG_FIND_PACKAGE=ON -DGIT_HASH="$(git rev-parse --short=7 HEAD)" -S . -B build
           } else {
             $VER = "${{ env.RELEASE_VERSION }}".substring(1)
-            cmake -DNIGHTLY_BUILD=OFF -DREL_VER="$VER" -DCMAKE_BUILD_TYPE=Release -S . -B build
+            cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DNIGHTLY_BUILD=OFF -DREL_VER="$VER" -S . -B build
           }
 
       - name: Build
@@ -95,13 +95,23 @@ jobs:
         shell: pwsh
         run: |
           .\scripts\deploy-windows.ps1 -TargetName "${{ env.TARGET_NAME }}" -DisplayName "${{ env.DISPLAY_NAME }}" -BuildDir "build" -Architecture "amd64" -Nightly ${{ github.event_name == 'workflow_dispatch' && inputs.zju_connect_nightly }}
-          Compress-Archive -Path "${{ env.DISPLAY_NAME }}" -DestinationPath ${{ env.ARCHIVE_NAME }}.zip
+          Compress-Archive -Path "${{ env.DISPLAY_NAME }}" -DestinationPath ${{ env.ARCHIVE_NAME }}.zip -CompressionLevel Optimal
+          python scripts/package_tools.py report "${{ env.DISPLAY_NAME }}" --archive "${{ env.ARCHIVE_NAME }}.zip" --output package-size.json
+          if ($LASTEXITCODE -ne 0) { throw 'Package size report failed' }
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.ARCHIVE_NAME }}
           path: ${{ env.ARCHIVE_NAME }}.zip
+
+      - name: Upload size reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: size-${{ env.ARCHIVE_NAME }}
+          path: |
+            package-size.json
+            package-pruning.json
 
   build-windows-arm64:
     runs-on: windows-11-arm
@@ -129,10 +139,10 @@ jobs:
         run: |
           mkdir build
           if ( [bool]::Parse("${{ env.NIGHTLY_BUILD }}") ) {
-            cmake -DNIGHTLY_BUILD=ON -DQT_DEBUG_FIND_PACKAGE=ON -DGIT_HASH="$(git rev-parse --short=7 HEAD)" -DCMAKE_BUILD_TYPE=Release -S . -B build
+            cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DNIGHTLY_BUILD=ON -DQT_DEBUG_FIND_PACKAGE=ON -DGIT_HASH="$(git rev-parse --short=7 HEAD)" -S . -B build
           } else {
             $VER = "${{ env.RELEASE_VERSION }}".substring(1)
-            cmake -DNIGHTLY_BUILD=OFF -DREL_VER="$VER" -DCMAKE_BUILD_TYPE=Release -S . -B build
+            cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DNIGHTLY_BUILD=OFF -DREL_VER="$VER" -S . -B build
           }
 
       - name: Build
@@ -143,13 +153,23 @@ jobs:
         shell: pwsh
         run: |
           .\scripts\deploy-windows.ps1 -TargetName "${{ env.TARGET_NAME }}" -DisplayName "${{ env.DISPLAY_NAME }}" -BuildDir "build" -Architecture "arm64" -Nightly ${{ github.event_name == 'workflow_dispatch' && inputs.zju_connect_nightly }}
-          Compress-Archive -Path "${{ env.DISPLAY_NAME }}" -DestinationPath ${{ env.ARCHIVE_NAME }}.zip
+          Compress-Archive -Path "${{ env.DISPLAY_NAME }}" -DestinationPath ${{ env.ARCHIVE_NAME }}.zip -CompressionLevel Optimal
+          python scripts/package_tools.py report "${{ env.DISPLAY_NAME }}" --archive "${{ env.ARCHIVE_NAME }}.zip" --output package-size.json
+          if ($LASTEXITCODE -ne 0) { throw 'Package size report failed' }
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.ARCHIVE_NAME }}
           path: ${{ env.ARCHIVE_NAME }}.zip
+
+      - name: Upload size reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: size-${{ env.ARCHIVE_NAME }}
+          path: |
+            package-size.json
+            package-pruning.json
 
   build-macos-arm64:
     runs-on: macos-26
@@ -176,10 +196,10 @@ jobs:
         run: |
           mkdir build
           if ${{ env.NIGHTLY_BUILD }} ; then
-            cmake -DNIGHTLY_BUILD=ON -DQT_DEBUG_FIND_PACKAGE=ON -DGIT_HASH=$(git rev-parse --short=7 HEAD) -DCMAKE_OSX_ARCHITECTURES="arm64" -S . -B build
+            cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DNIGHTLY_BUILD=ON -DQT_DEBUG_FIND_PACKAGE=ON -DGIT_HASH=$(git rev-parse --short=7 HEAD) -DCMAKE_OSX_ARCHITECTURES="arm64" -S . -B build
           else
             VER=${{ env.RELEASE_VERSION }}
-            cmake -DNIGHTLY_BUILD=OFF -DREL_VER=${VER#v} -DCMAKE_OSX_ARCHITECTURES="arm64" -S . -B build
+            cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DNIGHTLY_BUILD=OFF -DREL_VER=${VER#v} -DCMAKE_OSX_ARCHITECTURES="arm64" -S . -B build
           fi
 
       - name: Build
@@ -195,12 +215,21 @@ jobs:
           ditto -c -k --sequesterRsrc --keepParent \
             "${{ env.TARGET_NAME }}.app" \
             "${{ env.ARCHIVE_NAME }}.zip"
+          python3 scripts/package_tools.py report "${{ env.TARGET_NAME }}.app" --archive "${{ env.ARCHIVE_NAME }}.zip" --output package-size.json
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.ARCHIVE_NAME }}
           path: ${{ env.ARCHIVE_NAME }}.zip
+
+      - name: Upload size reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: size-${{ env.ARCHIVE_NAME }}
+          path: |
+            package-size.json
+            package-pruning.json
 
   build-linux-x64:
     runs-on: ubuntu-22.04
@@ -227,10 +256,10 @@ jobs:
         run: |
           mkdir build
           if ${{ env.NIGHTLY_BUILD }} ; then
-            cmake -DNIGHTLY_BUILD=ON -DQT_DEBUG_FIND_PACKAGE=ON -DGIT_HASH=$(git rev-parse --short=7 HEAD) -S . -B build
+            cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DNIGHTLY_BUILD=ON -DQT_DEBUG_FIND_PACKAGE=ON -DGIT_HASH=$(git rev-parse --short=7 HEAD) -S . -B build
           else
             VER=${{ env.RELEASE_VERSION }}
-            cmake -DNIGHTLY_BUILD=OFF -DREL_VER=${VER#v} -S . -B build
+            cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DNIGHTLY_BUILD=OFF -DREL_VER=${VER#v} -S . -B build
           fi
 
       - name: Build
@@ -241,12 +270,21 @@ jobs:
         run: |
           ./scripts/deploy-linux.sh "${{ env.TARGET_NAME }}" "${{ env.DISPLAY_NAME }}" "build" "x86_64" "${{ github.event_name == 'workflow_dispatch' && inputs.zju_connect_nightly }}"
           mv *.AppImage ${{ env.ARCHIVE_NAME }}.AppImage
+          python3 scripts/package_tools.py report AppDir --archive "${{ env.ARCHIVE_NAME }}.AppImage" --output package-size.json
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.ARCHIVE_NAME }}
           path: ${{ env.ARCHIVE_NAME }}.AppImage
+
+      - name: Upload size reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: size-${{ env.ARCHIVE_NAME }}
+          path: |
+            package-size.json
+            package-pruning.json
 
   build-linux-arm64:
     runs-on: ubuntu-24.04-arm
@@ -278,10 +316,10 @@ jobs:
         run: |
           mkdir build
           if ${{ env.NIGHTLY_BUILD }} ; then
-            cmake -DNIGHTLY_BUILD=ON -DQT_DEBUG_FIND_PACKAGE=ON -DGIT_HASH=$(git rev-parse --short=7 HEAD) -S . -B build
+            cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DNIGHTLY_BUILD=ON -DQT_DEBUG_FIND_PACKAGE=ON -DGIT_HASH=$(git rev-parse --short=7 HEAD) -S . -B build
           else
             VER=${{ env.RELEASE_VERSION }}
-            cmake -DNIGHTLY_BUILD=OFF -DREL_VER=${VER#v} -S . -B build
+            cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DNIGHTLY_BUILD=OFF -DREL_VER=${VER#v} -S . -B build
           fi
 
       - name: Build
@@ -292,12 +330,21 @@ jobs:
         run: |
           ./scripts/deploy-linux.sh "${{ env.TARGET_NAME }}" "${{ env.DISPLAY_NAME }}" "build" "arm64" "${{ github.event_name == 'workflow_dispatch' && inputs.zju_connect_nightly }}"
           mv *.AppImage ${{ env.ARCHIVE_NAME }}.AppImage
+          python3 scripts/package_tools.py report AppDir --archive "${{ env.ARCHIVE_NAME }}.AppImage" --output package-size.json
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.ARCHIVE_NAME }}
           path: ${{ env.ARCHIVE_NAME }}.AppImage
+
+      - name: Upload size reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: size-${{ env.ARCHIVE_NAME }}
+          path: |
+            package-size.json
+            package-pruning.json
 
   release:
     runs-on: ubuntu-latest

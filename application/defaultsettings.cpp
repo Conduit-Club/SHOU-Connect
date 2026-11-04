@@ -4,6 +4,14 @@
 
 #include "application/applicationconstants.h"
 
+void DefaultSettings::applyAuthentication(QSettings &settings)
+{
+    settings.setValue("SHOUConnect/Protocol", Protocol);
+    settings.setValue("SHOUConnect/AuthType", AuthType);
+    settings.setValue("SHOUConnect/LoginDomain", LoginDomain);
+    settings.setValue("SHOUConnect/LoginURL", LoginUrl);
+}
+
 void DefaultSettings::reset(QSettings &settings)
 {
     settings.setValue("Credential/Username", "");
@@ -17,8 +25,8 @@ void DefaultSettings::reset(QSettings &settings)
     settings.setValue("Common/AutoReconnect", false);
     settings.setValue("Common/SystemProxyBypass", "");
 
-    settings.setValue("SHOUConnect/ServerAddress", "vpn.shou.edu.cn");
-    settings.setValue("SHOUConnect/ServerPort", 443);
+    settings.setValue("SHOUConnect/ServerAddress", ServerAddress);
+    settings.setValue("SHOUConnect/ServerPort", ServerPort);
     settings.setValue("SHOUConnect/DNS", "");
     settings.setValue("SHOUConnect/DNSAuto", true);
     settings.setValue("SHOUConnect/SecondaryDNS", "");
@@ -32,11 +40,8 @@ void DefaultSettings::reset(QSettings &settings)
     settings.setValue("SHOUConnect/UpdateBestNodesInterval", 300);
     settings.setValue("SHOUConnect/CredentialsAsArguments", false);
 
-    settings.setValue("SHOUConnect/Protocol", "easyconnect");
+    applyAuthentication(settings);
     settings.setValue("SHOUConnect/EasyConnectAuthType", "password");
-    settings.setValue("SHOUConnect/LoginDomain", "");
-    settings.setValue("SHOUConnect/AuthType", "");
-    settings.setValue("SHOUConnect/LoginURL", "");
     settings.setValue("SHOUConnect/PhoneCountryCode", "86");
     settings.setValue("SHOUConnect/PhoneNumber", "");
 

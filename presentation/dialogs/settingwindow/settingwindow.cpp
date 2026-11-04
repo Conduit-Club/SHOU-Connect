@@ -322,7 +322,7 @@ void SettingWindow::applySettings()
 
     settings->setValue("Credential/Username", ui->usernameLineEdit->text());
     settings->setValue("Credential/Password", QString(ui->passwordLineEdit->text().toUtf8().toBase64()));
-    settings->setValue("Credential/TOTPSecret", ui->totpSecretLineEdit->text());
+    settings->setValue("Credential/TOTPSecret", ui->totpSecretLineEdit->text().trimmed());
     settings->setValue("Credential/CertFile", ui->certFileLineEdit->text());
     settings->setValue("Credential/CertPassword", QString(ui->certPasswordLineEdit->text().toUtf8().toBase64()));
     settings->setValue(

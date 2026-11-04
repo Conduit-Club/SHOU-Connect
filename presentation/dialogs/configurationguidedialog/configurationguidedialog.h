@@ -88,11 +88,12 @@ private:
     QLineEdit *phoneNumberLineEdit;
     QLineEdit *certificateFileLineEdit;
     QLineEdit *certificatePasswordLineEdit;
-    QLineEdit *certificateTotpSecretLineEdit;
 
     QString selectedAuthType;
     QString selectedLoginDomain;
     QString selectedLoginUrl;
+    QString authenticationServer;
+    int authenticationPort = 0;
 };
 
 #endif // CONFIGURATIONGUIDEDIALOG_H

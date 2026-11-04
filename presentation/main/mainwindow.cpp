@@ -968,6 +968,12 @@ void MainWindow::deleteCurrentProfile()
 void MainWindow::upgradeSettings()
 {
     const SettingsMigrationAction action = SettingsMigrator::prepare(*settings);
+    if (action == SettingsMigrationAction::Failed)
+    {
+        QMessageBox::warning(this, "配置升级失败",
+            "无法备份配置，已保留原配置。请检查配置文件和备份文件的访问权限后重试。");
+        return;
+    }
     if (action == SettingsMigrationAction::MigrateAutoStart)
     {
         profileService->migrateAutoStartSetting(
@@ -983,14 +989,19 @@ void MainWindow::upgradeSettings()
         msgBox.setDefaultButton(QMessageBox::Cancel);
 
         const bool reset = msgBox.exec() == QMessageBox::Ok;
-        SettingsMigrator::finish(*settings, reset);
+        if (!SettingsMigrator::finish(*settings, reset))
+        {
+            QMessageBox::warning(this, "配置升级失败", "无法保存配置，配置版本未升级。请检查文件访问权限。");
+            return;
+        }
         if (reset)
         {
             QMessageBox::information(this, "完成", "已恢复默认设置。");
         }
         return;
     }
-    SettingsMigrator::finish(*settings, false);
+    if (!SettingsMigrator::finish(*settings, false))
+        QMessageBox::warning(this, "配置升级失败", "无法保存配置，配置版本未升级。请检查文件访问权限。");
 }
 
 void MainWindow::updateVersionInfo()

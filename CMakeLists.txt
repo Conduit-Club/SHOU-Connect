@@ -135,6 +135,12 @@ target_link_libraries(${PROJECT_NAME}
 include(CTest)
 
 if(BUILD_TESTING)
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME package_tools_test
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/package_tools_test.py
+        )
+    endif()
     add_executable(applicationlogger_test
         tests/applicationlogger_test.cpp
         application/applicationlogger.cpp
@@ -174,6 +180,22 @@ if(BUILD_TESTING)
     target_include_directories(coreoutputbuffer_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     target_link_libraries(coreoutputbuffer_test Qt::Core)
     add_test(NAME coreoutputbuffer_test COMMAND coreoutputbuffer_test)
+
+    add_executable(zjuconnectprocess_test
+        tests/zjuconnectprocess_test.cpp
+        application/coreprocess.h
+        infrastructure/coreprocess/zjuconnectprocess.cpp
+        infrastructure/coreprocess/corecommandbuilder.cpp
+        infrastructure/coreprocess/consoleoutputdecoder.cpp
+        infrastructure/coreprocess/coreoutputparser.cpp
+        infrastructure/coreprocess/coreoutputbuffer.cpp
+        infrastructure/platform/privileges.cpp
+        infrastructure/storage/applicationpaths.cpp
+    )
+    target_include_directories(zjuconnectprocess_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(zjuconnectprocess_test Qt::Core Qt::Core5Compat ${PLATFORM_LIBS})
+    add_test(NAME zjuconnectprocess_test COMMAND zjuconnectprocess_test)
+    set_tests_properties(zjuconnectprocess_test PROPERTIES TIMEOUT 20)
 
     add_executable(settingsprofileloader_test
         tests/settingsprofileloader_test.cpp
@@ -260,6 +282,29 @@ if(BUILD_TESTING)
     add_test(NAME configurationguidedialog_test COMMAND configurationguidedialog_test)
     set_tests_properties(configurationguidedialog_test PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    )
+
+    add_executable(settingwindow_test
+        tests/settingwindow_test.cpp
+        presentation/dialogs/settingwindow/settingwindow.cpp
+        presentation/dialogs/extrasettingwindow/extrasettingwindow.cpp
+        presentation/dialogs/authinfowindow/authinfowindow.cpp
+        presentation/presentationhelpers.cpp
+        application/defaultsettings.cpp
+        infrastructure/settings/profilemanager.cpp
+        infrastructure/storage/applicationpaths.cpp
+        infrastructure/platform/autostart.cpp
+        infrastructure/coreprocess/consoleoutputdecoder.cpp
+        infrastructure/coreprocess/coreexecutable.cpp
+    )
+    target_include_directories(settingwindow_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(settingwindow_test
+        Qt::Core Qt::Gui Qt::Widgets Qt::Network Qt::Core5Compat
+    )
+    add_test(NAME settingwindow_test COMMAND settingwindow_test)
+    set_tests_properties(settingwindow_test PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+        TIMEOUT 20
     )
 
     add_executable(graphcaptchawindow_test

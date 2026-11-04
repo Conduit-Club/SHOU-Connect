@@ -20,9 +20,17 @@ bool recognizesCoreProtocol()
         {"Please enter the SMS verification code: ", CoreOutputEvent::SmsCodeWithSkipOption},
         {"Please enter your SMS code:", CoreOutputEvent::SmsCode},
         {"Please enter your TOTP code:", CoreOutputEvent::TotpCode},
+        {"Please enter the TOTP token:", CoreOutputEvent::TotpCode},
+        {"Please enter the SMS verification code:", CoreOutputEvent::SmsCodeWithSkipOption},
+        {"Please enter rand code:", CoreOutputEvent::RandCode},
+        {"Please enter the RADIUS token:", CoreOutputEvent::RadiusCodeWithSkipOption},
+        {"Please enter the graph check code JSON:", CoreOutputEvent::GraphCaptcha},
         {"Please enter the callback url:", CoreOutputEvent::SsoCallback},
+        {"Please enter the callback URL:", CoreOutputEvent::SsoCallback},
+        {"Please enter the callback Url:", CoreOutputEvent::SsoCallback},
         {"VPN client started", CoreOutputEvent::ClientStarted},
         {"graph check code still required after second login attempt", CoreOutputEvent::CaptchaFailed},
+        {"The characters are incorrect or has expired!", CoreOutputEvent::CaptchaFailed},
         {"Access is denied.", CoreOutputEvent::AccessDenied},
         {"listen failed on 127.0.0.1", CoreOutputEvent::ListenFailed},
         {"Invalid username or password!", CoreOutputEvent::InvalidCredentials},
@@ -72,8 +80,13 @@ bool recognizesInteractivePromptsBeforeNewline()
         "Please enter the SMS verification code: ",
         "Please enter your SMS code:",
         "Please enter your TOTP code:",
+        "Please enter the TOTP token:",
+        "Please enter the SMS verification code:",
         "Please enter rand code:",
+        "Please enter the RADIUS token:",
+        "Please enter the graph check code JSON:",
         "Please enter the callback url:",
+        "Please enter the callback URL:",
     };
     for (const QByteArray &prompt : prompts)
     {
@@ -84,7 +97,10 @@ bool recognizesInteractivePromptsBeforeNewline()
         }
     }
 
-    return !CoreOutputParser::hasInteractivePrompt("ordinary partial output");
+    return !CoreOutputParser::hasInteractivePrompt("ordinary partial output")
+        && !CoreOutputParser::hasInteractivePrompt("Please enter the TOTP tok")
+        && !CoreOutputParser::hasInteractivePrompt("Graph check code saved to /tmp/graph.jpg")
+        && !CoreOutputParser::hasInteractivePrompt("VPN client started");
 }
 
 bool extractsGraphCaptchaFileFromCoreOutput()

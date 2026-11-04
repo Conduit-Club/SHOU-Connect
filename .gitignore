@@ -46,4 +46,7 @@ CMakeUserPresets.json
 
 /.vscode
 
+# Python packaging helpers
+__pycache__/
+
 !wintun.dll

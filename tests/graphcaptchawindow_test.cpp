@@ -1,6 +1,7 @@
 #include <QApplication>
 #include <QDebug>
 #include <QDialogButtonBox>
+#include <QImage>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLineEdit>
@@ -120,6 +121,32 @@ bool mapsScaledClicksToImageCoordinates()
     }
     return true;
 }
+
+bool reloadsImageAndClearsPointsOnRetry()
+{
+    QTemporaryDir directory;
+    const QString path = createCaptchaImage(directory);
+    GraphCaptchaWindow window;
+    window.setGraph(path, false);
+    auto *canvas = window.findChild<CaptchaCanvas *>("canvas");
+    if (!canvas || path.isEmpty())
+        return false;
+    canvas->resize(240, 160);
+    const QPointF position(120, 80);
+    QMouseEvent click(QEvent::MouseButtonPress, position, position, position,
+                      Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(canvas, &click);
+    if (canvas->pointsPx().isEmpty())
+        return false;
+    QPixmap replacement(60, 90);
+    replacement.fill(Qt::blue);
+    if (!replacement.save(path))
+        return false;
+    window.setGraph(path, false);
+    return canvas->image().size() == replacement.size()
+        && canvas->image().toImage().pixelColor(0, 0) == QColor(Qt::blue)
+        && canvas->pointsPx().isEmpty();
+}
 }
 
 int main(int argc, char *argv[])
@@ -129,6 +156,7 @@ int main(int argc, char *argv[])
         && cancelsWithoutSubmittingPlaceholder()
         && preservesCoordinateCaptchaResponse()
         && mapsScaledClicksToImageCoordinates()
+        && reloadsImageAndClearsPointsOnRetry()
         ? 0
         : 1;
 }

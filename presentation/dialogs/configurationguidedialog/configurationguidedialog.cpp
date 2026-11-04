@@ -21,6 +21,7 @@
 #include <QVBoxLayout>
 
 #include "presentation/dialogs/authinfowindow/authinfowindow.h"
+#include "application/defaultsettings.h"
 
 namespace
 {
@@ -97,10 +98,15 @@ ConfigurationGuideDialog::ConfigurationGuideDialog(
         atrustRadioButton->setChecked(true);
     }
 
+    const bool schoolServer = sourceSettings->value(
+        "SHOUConnect/ServerAddress", DefaultSettings::ServerAddress
+    ).toString().trimmed().compare(DefaultSettings::ServerAddress, Qt::CaseInsensitive) == 0
+        && sourceSettings->value("SHOUConnect/ServerPort", DefaultSettings::ServerPort).toInt()
+            == DefaultSettings::ServerPort;
     selectAuthenticationMethod(
-        sourceSettings->value("SHOUConnect/AuthType", "psw").toString(),
-        sourceSettings->value("SHOUConnect/LoginDomain").toString(),
-        sourceSettings->value("SHOUConnect/LoginURL").toString()
+        sourceSettings->value("SHOUConnect/AuthType", schoolServer ? DefaultSettings::AuthType : "psw").toString(),
+        sourceSettings->value("SHOUConnect/LoginDomain", schoolServer ? DefaultSettings::LoginDomain : "").toString(),
+        sourceSettings->value("SHOUConnect/LoginURL", schoolServer ? DefaultSettings::LoginUrl : "").toString()
     );
 
     const QString easyconnectAuthType = sourceSettings->value(
@@ -125,7 +131,6 @@ ConfigurationGuideDialog::ConfigurationGuideDialog(
     totpSecretLineEdit->setText(
         sourceSettings->value("Credential/TOTPSecret").toString()
     );
-    certificateTotpSecretLineEdit->setText(totpSecretLineEdit->text());
     countryCodeLineEdit->setText(
         sourceSettings->value("SHOUConnect/PhoneCountryCode", "86").toString()
     );
@@ -207,18 +212,31 @@ QWidget *ConfigurationGuideDialog::createServerPage()
     formLayout->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
 
     serverAddressLineEdit = new QLineEdit(page);
+    serverAddressLineEdit->setObjectName("guideServerAddressLineEdit");
     serverAddressLineEdit->setPlaceholderText("例如：vpn.example.edu.cn");
     serverAddressLineEdit->setText(
-        sourceSettings->value("SHOUConnect/ServerAddress").toString()
+        sourceSettings->value("SHOUConnect/ServerAddress", DefaultSettings::ServerAddress).toString()
     );
     formLayout->addRow("服务器地址", serverAddressLineEdit);
 
     serverPortSpinBox = new QSpinBox(page);
+    serverPortSpinBox->setObjectName("guideServerPortSpinBox");
     serverPortSpinBox->setRange(1, 65535);
     serverPortSpinBox->setValue(
-        sourceSettings->value("SHOUConnect/ServerPort", 443).toInt()
+        sourceSettings->value("SHOUConnect/ServerPort", DefaultSettings::ServerPort).toInt()
     );
     formLayout->addRow("服务器端口", serverPortSpinBox);
+
+    const auto invalidateAuthentication = [this]() {
+        if (serverAddressLineEdit->text().trimmed().compare(authenticationServer, Qt::CaseInsensitive) != 0
+            || serverPortSpinBox->value() != authenticationPort)
+        {
+            selectAuthenticationMethod({}, {}, {});
+            fetchAuthenticationButton->setText("获取认证方式");
+        }
+    };
+    connect(serverAddressLineEdit, &QLineEdit::editingFinished, this, invalidateAuthentication);
+    connect(serverPortSpinBox, &QSpinBox::editingFinished, this, invalidateAuthentication);
 
     pageLayout->addLayout(formLayout);
     pageLayout->addStretch();
@@ -234,6 +252,7 @@ QWidget *ConfigurationGuideDialog::createProtocolPage()
     auto *protocolLayout = new QVBoxLayout(protocolGroup);
 
     atrustRadioButton = new QRadioButton("aTrust", protocolGroup);
+    atrustRadioButton->setObjectName("guideAtrustRadioButton");
     auto *atrustDescription = new QLabel(
         "适用于新版深信服 aTrust 服务器，可从服务器获取认证方式。",
         protocolGroup
@@ -241,6 +260,7 @@ QWidget *ConfigurationGuideDialog::createProtocolPage()
     atrustDescription->setWordWrap(true);
 
     easyconnectRadioButton = new QRadioButton("EasyConnect", protocolGroup);
+    easyconnectRadioButton->setObjectName("guideEasyconnectRadioButton");
     auto *easyconnectDescription = new QLabel(
         "适用于传统 EasyConnect 服务器。",
         protocolGroup
@@ -356,18 +376,6 @@ QWidget *ConfigurationGuideDialog::createCredentialsPage()
     passwordRowLayout->addWidget(showPasswordCheckBox);
     passwordForm->addRow("密码", passwordRow);
 
-    auto *totpRow = new QWidget(passwordGroup);
-    auto *totpRowLayout = new QHBoxLayout(totpRow);
-    totpRowLayout->setContentsMargins(0, 0, 0, 0);
-    totpSecretLineEdit = new QLineEdit(totpRow);
-    totpSecretLineEdit->setObjectName("guideTotpSecretLineEdit");
-    totpSecretLineEdit->setEchoMode(QLineEdit::Password);
-    totpSecretLineEdit->setPlaceholderText("可选，TOTP 验证器密钥");
-    auto *showTotpCheckBox = new QCheckBox("显示", totpRow);
-    totpRowLayout->addWidget(totpSecretLineEdit, 1);
-    totpRowLayout->addWidget(showTotpCheckBox);
-    passwordForm->addRow("TOTP 密钥", totpRow);
-
     passwordPageLayout->addWidget(passwordGroup);
     passwordPageLayout->addStretch();
     credentialPages->addWidget(passwordPage);
@@ -442,24 +450,6 @@ QWidget *ConfigurationGuideDialog::createCredentialsPage()
     certificatePasswordRowLayout->addWidget(showCertificatePasswordCheckBox);
     certificateForm->addRow("证书密码", certificatePasswordRow);
 
-    auto *certificateTotpRow = new QWidget(certificateGroup);
-    auto *certificateTotpRowLayout = new QHBoxLayout(certificateTotpRow);
-    certificateTotpRowLayout->setContentsMargins(0, 0, 0, 0);
-    certificateTotpSecretLineEdit = new QLineEdit(certificateTotpRow);
-    certificateTotpSecretLineEdit->setObjectName(
-        "guideCertificateTotpSecretLineEdit"
-    );
-    certificateTotpSecretLineEdit->setEchoMode(QLineEdit::Password);
-    certificateTotpSecretLineEdit->setPlaceholderText(
-        "可选，TOTP 验证器密钥"
-    );
-    auto *showCertificateTotpCheckBox = new QCheckBox(
-        "显示",
-        certificateTotpRow
-    );
-    certificateTotpRowLayout->addWidget(certificateTotpSecretLineEdit, 1);
-    certificateTotpRowLayout->addWidget(showCertificateTotpCheckBox);
-    certificateForm->addRow("TOTP 密钥", certificateTotpRow);
     certificatePageLayout->addWidget(certificateGroup);
     certificatePageLayout->addStretch();
     credentialPages->addWidget(certificatePage);
@@ -467,7 +457,7 @@ QWidget *ConfigurationGuideDialog::createCredentialsPage()
     auto *ssoPage = new QWidget(credentialPages);
     auto *ssoPageLayout = new QVBoxLayout(ssoPage);
     auto *ssoLabel = new QLabel(
-        "此认证方式将在连接时打开登录页面，无需提前填写登录凭据。",
+        "此认证方式将在连接时打开登录页面，无需提前填写账号和密码；如需二次认证，可在下方配置 TOTP 密钥。",
         ssoPage
     );
     ssoLabel->setWordWrap(true);
@@ -476,6 +466,31 @@ QWidget *ConfigurationGuideDialog::createCredentialsPage()
     credentialPages->addWidget(ssoPage);
 
     pageLayout->addWidget(credentialPages);
+
+    auto *totpGroup = new QGroupBox("二次认证（TOTP）", page);
+    totpGroup->setObjectName("guideTotpGroupBox");
+    auto *totpForm = new QFormLayout(totpGroup);
+    totpForm->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+    auto *totpRow = new QWidget(totpGroup);
+    auto *totpRowLayout = new QHBoxLayout(totpRow);
+    totpRowLayout->setContentsMargins(0, 0, 0, 0);
+    totpSecretLineEdit = new QLineEdit(totpRow);
+    totpSecretLineEdit->setObjectName("guideTotpSecretLineEdit");
+    totpSecretLineEdit->setEchoMode(QLineEdit::Password);
+    totpSecretLineEdit->setPlaceholderText("可选，TOTP 验证器密钥");
+    auto *showTotpCheckBox = new QCheckBox("显示", totpRow);
+    showTotpCheckBox->setObjectName("guideTotpSecretVisibleCheckBox");
+    totpRowLayout->addWidget(totpSecretLineEdit, 1);
+    totpRowLayout->addWidget(showTotpCheckBox);
+    totpForm->addRow("TOTP 密钥", totpRow);
+
+    auto *totpHelp = new QLabel(
+        "可选，填写验证器密钥可自动生成验证码；留空则在服务器要求时手动输入。",
+        totpGroup
+    );
+    totpHelp->setWordWrap(true);
+    totpForm->addRow(totpHelp);
+    pageLayout->addWidget(totpGroup);
 
     connect(showPasswordCheckBox, &QCheckBox::toggled, this, [this](bool checked) {
         passwordLineEdit->setEchoMode(
@@ -496,28 +511,6 @@ QWidget *ConfigurationGuideDialog::createCredentialsPage()
                 checked ? QLineEdit::Normal : QLineEdit::Password
             );
         }
-    );
-    connect(
-        showCertificateTotpCheckBox,
-        &QCheckBox::toggled,
-        this,
-        [this](bool checked) {
-            certificateTotpSecretLineEdit->setEchoMode(
-                checked ? QLineEdit::Normal : QLineEdit::Password
-            );
-        }
-    );
-    connect(
-        totpSecretLineEdit,
-        &QLineEdit::textChanged,
-        certificateTotpSecretLineEdit,
-        &QLineEdit::setText
-    );
-    connect(
-        certificateTotpSecretLineEdit,
-        &QLineEdit::textChanged,
-        totpSecretLineEdit,
-        &QLineEdit::setText
     );
     connect(
         browseCertificateButton,
@@ -718,6 +711,8 @@ void ConfigurationGuideDialog::selectAuthenticationMethod(
     selectedAuthType = normalizedAuthType(authType);
     selectedLoginDomain = loginDomain;
     selectedLoginUrl = loginUrl;
+    authenticationServer = serverAddressLineEdit->text().trimmed();
+    authenticationPort = serverPortSpinBox->value();
 
     QString details = "当前选择：" + authenticationMethodName(selectedAuthType);
     if (!selectedLoginDomain.isEmpty())

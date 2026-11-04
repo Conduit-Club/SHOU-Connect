@@ -379,6 +379,39 @@
             </property>
            </widget>
           </item>
+          <item row="4" column="0">
+           <widget class="QLabel" name="zjuConnectTabLabel6_2">
+            <property name="text">
+             <string>TOTP 密钥</string>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="1" colspan="3">
+           <widget class="QLineEdit" name="totpSecretLineEdit">
+            <property name="toolTip">
+             <string>可选，填写验证器密钥可自动生成验证码；留空则在服务器要求时手动输入。</string>
+            </property>
+            <property name="echoMode">
+             <enum>QLineEdit::EchoMode::Password</enum>
+            </property>
+            <property name="placeholderText">
+             <string>可选，TOTP 验证器密钥</string>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="4">
+           <widget class="QCheckBox" name="totpSecretVisibleCheckBox">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
          </layout>
         </widget>
        </item>
@@ -417,19 +450,6 @@
             </property>
            </widget>
           </item>
-          <item row="3" column="3">
-           <widget class="QCheckBox" name="totpSecretVisibleCheckBox">
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-              <horstretch>0</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
-            </property>
-            <property name="text">
-             <string/>
-            </property>
-           </widget>
-          </item>
           <item row="0" column="1">
            <widget class="QLineEdit" name="certFileLineEdit">
             <property name="placeholderText">
@@ -457,27 +477,10 @@
             </property>
            </widget>
           </item>
-          <item row="3" column="1" colspan="2">
-           <widget class="QLineEdit" name="totpSecretLineEdit">
-            <property name="echoMode">
-             <enum>QLineEdit::EchoMode::Password</enum>
-            </property>
-            <property name="placeholderText">
-             <string>可选，以通过 TOTP 验证器</string>
-            </property>
-           </widget>
-          </item>
           <item row="0" column="2" colspan="2">
            <widget class="QPushButton" name="certFileBrowseButton">
             <property name="text">
              <string>浏览</string>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="0">
-           <widget class="QLabel" name="zjuConnectTabLabel6_2">
-            <property name="text">
-             <string>TOTP 密钥</string>
             </property>
            </widget>
           </item>
@@ -1149,6 +1152,8 @@
   <tabstop>tabWidget</tabstop>
   <tabstop>usernameLineEdit</tabstop>
   <tabstop>passwordLineEdit</tabstop>
+  <tabstop>totpSecretLineEdit</tabstop>
+  <tabstop>totpSecretVisibleCheckBox</tabstop>
   <tabstop>serverAddressLineEdit</tabstop>
   <tabstop>serverPortSpinBox</tabstop>
   <tabstop>dnsLineEdit</tabstop>
