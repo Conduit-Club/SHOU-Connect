@@ -1,7 +1,6 @@
 #include "configurationguidedialog.h"
 
 #include <QCheckBox>
-#include <QDialogButtonBox>
 #include <QFileDialog>
 #include <QFormLayout>
 #include <QFont>
@@ -70,12 +69,18 @@ ConfigurationGuideDialog::ConfigurationGuideDialog(
     pages->addWidget(createCredentialsPage());
     layout->addWidget(pages, 1);
 
-    auto *buttonBox = new QDialogButtonBox(QDialogButtonBox::Cancel, this);
-    backButton = buttonBox->addButton("上一步", QDialogButtonBox::ActionRole);
-    nextButton = buttonBox->addButton("下一步", QDialogButtonBox::AcceptRole);
-    layout->addWidget(buttonBox);
+    auto *navigationLayout = new QHBoxLayout;
+    auto *cancelButton = new QPushButton("取消", this);
+    backButton = new QPushButton("上一步", this);
+    nextButton = new QPushButton("下一步", this);
+    nextButton->setDefault(true);
+    navigationLayout->addWidget(cancelButton);
+    navigationLayout->addStretch();
+    navigationLayout->addWidget(backButton);
+    navigationLayout->addWidget(nextButton);
+    layout->addLayout(navigationLayout);
 
-    connect(buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    connect(cancelButton, &QPushButton::clicked, this, &QDialog::reject);
     connect(backButton, &QPushButton::clicked, this, &ConfigurationGuideDialog::goBack);
     connect(nextButton, &QPushButton::clicked, this, &ConfigurationGuideDialog::goNext);
     connect(
