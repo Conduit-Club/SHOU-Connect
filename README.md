@@ -13,7 +13,9 @@
 
 ## 🎉 支持 EasyConnect 与 aTrust
 
-如使用中遇到问题，可加入 ZJU-Connect 用户反馈 QQ 群 1037726410 交流。
+如使用中遇到zju-connect相关的问题，可加入 ZJU-Connect 用户反馈 QQ 群 1037726410 交流。
+
+目前本项目还请使用 issues 反馈问题。
 
 <div align="center">
 <img src="docs/main.png" width="600px">

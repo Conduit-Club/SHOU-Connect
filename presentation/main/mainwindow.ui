@@ -326,7 +326,7 @@
          <item>
           <widget class="QLabel" name="qqGroupLabel">
            <property name="text">
-            <string>如遇问题加 QQ 群反馈：1037726410</string>
+            <string>如遇ZJU-Connect问题加 QQ 群反馈：1037726410</string>
            </property>
           </widget>
          </item>
