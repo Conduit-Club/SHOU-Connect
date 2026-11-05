@@ -18,7 +18,7 @@ on:
       publish_release:
         type: boolean
         default: false
-        description: "Publish release assets for version (requires nightly disabled)"
+        description: "Create a draft release for version (requires nightly disabled)"
 
 permissions:
   contents: read
@@ -222,7 +222,7 @@ jobs:
           merge-multiple: true
           skip-decompress: true
 
-      - name: Publish release assets
+      - name: Create draft release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -230,4 +230,4 @@ jobs:
           RELEASE_COMMIT: ${{ github.sha }}
         run: |
           gh release create "$RELEASE_TAG" dist/"$ARCHIVE_PREFIX"-* \
-            --repo "$GH_REPO" --target "$RELEASE_COMMIT" --title "$RELEASE_TAG" --generate-notes
+            --repo "$GH_REPO" --target "$RELEASE_COMMIT" --title "$RELEASE_TAG" --generate-notes --draft
