@@ -13,9 +13,7 @@
 
 ## 🎉 支持 EasyConnect 与 aTrust
 
-如使用中遇到zju-connect相关的问题，可加入 ZJU-Connect 用户反馈 QQ 群 1037726410 交流。
-
-目前本项目还请使用 issues 反馈问题。
+**目前，对于本项目 SHOU Connect 还请使用 issues 反馈问题。**
 
 <div align="center">
 <img src="docs/main.png" width="600px">
@@ -39,11 +37,9 @@
 
 2. 在主界面中点击“连接服务器”。如果只需进行校园网页浏览，则选择“设置系统代理”后即可使用。
 
-如果需要配合 Clash / Mihomo 进行高级的分流操作，可以参见： [高级使用方式](docs/ADVANCED_USAGE.md)
-
 ## 路线图
 
-如有更多好的建议，可以在 Issue 中或是 OSA 群里提出！
+如有更多好的建议，可以在 Issue 中提出！
 
 - [X] 支持 macOS 系统
 - [X] 支持 Linux 系统
