@@ -18,7 +18,7 @@ on:
       publish_release:
         type: boolean
         default: false
-        description: "Upload to the existing release for version (requires nightly disabled)"
+        description: "Publish release assets for version (requires nightly disabled)"
 
 permissions:
   contents: read
@@ -222,9 +222,12 @@ jobs:
           merge-multiple: true
           skip-decompress: true
 
-      - name: Upload release assets
+      - name: Publish release assets
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ inputs.version }}
-        run: gh release upload "$RELEASE_TAG" dist/"$ARCHIVE_PREFIX"-* --repo "$GH_REPO" --clobber
+          RELEASE_COMMIT: ${{ github.sha }}
+        run: |
+          gh release create "$RELEASE_TAG" dist/"$ARCHIVE_PREFIX"-* \
+            --repo "$GH_REPO" --target "$RELEASE_COMMIT" --title "$RELEASE_TAG" --generate-notes
