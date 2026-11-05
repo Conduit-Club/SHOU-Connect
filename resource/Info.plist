@@ -9,7 +9,7 @@
 	<key>CFBundleIconFile</key>
 	<string>icon.icns</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.github.chenx-dust.SHOUConnect</string>
+	<string>com.github.conduit-club.SHOUConnect</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleLongVersionString</key>
@@ -27,6 +27,6 @@
 	<key>CSResourcesFileMapped</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>
-	<string>Copyright © 2025 Chenx Dust. Licensed under GPL-3.0.</string>
+	<string>Copyright © 2025 Chenx Dust, Conduit Club. Licensed under GPL-3.0.</string>
 </dict>
 </plist>
