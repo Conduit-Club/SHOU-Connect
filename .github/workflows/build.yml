@@ -1,434 +1,225 @@
-name: Build
+name: Build and release
 
 on:
   release:
-    types: [ published ]
+    types: [published]
   push:
-    branches: [ master, dev ]
-    tags-ignore: [ 'v*' ]
+    branches: [main, dev]
   pull_request:
   workflow_dispatch:
     inputs:
       nightly:
         type: boolean
         default: true
-        description: "Nightly Build"
+        description: "Build a nightly version"
       zju_connect_nightly:
         type: boolean
         default: false
         description: "Use nightly zju-connect"
       version:
         type: string
-        default: ''
-        description: "Version (e.g. v0.0.0)"
+        default: ""
+        description: "Release version when nightly is disabled (e.g. v0.0.0)"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
 
 env:
-  QT_VERSION: '6.10.3'
-  TARGET_NAME: 'SHOUConnect'
-  DISPLAY_NAME: 'SHOUConnect'
+  QT_VERSION: "6.10.3"
+  TARGET_NAME: "SHOUConnect"
+  DISPLAY_NAME: "SHOUConnect"
+  NIGHTLY_BUILD: ${{ github.event_name != 'release' && (github.event_name != 'workflow_dispatch' || inputs.nightly) }}
+  RELEASE_VERSION: ${{ inputs.version || github.event.release.tag_name }}
+  CORE_NIGHTLY: ${{ github.event_name == 'workflow_dispatch' && inputs.zju_connect_nightly }}
 
 jobs:
-  unit-tests:
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Qt
-        uses: jurplel/install-qt-action@v4
-        with:
-          version: ${{ env.QT_VERSION }}
-          host: 'linux'
-          target: 'desktop'
-          arch: 'linux_gcc_64'
-          modules: 'qt5compat qtpositioning qtserialport qtwebchannel qtwebengine'
-          cache: 'true'
-          cache-key-prefix: 'install-qt-action-linux_gcc_64'
-
-      - name: Configure tests
-        run: |
-          cmake -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Release -S . -B build
-
-      - name: Build tests
-        run: |
-          cmake --build build --config Release --parallel $(nproc)
-
-      - name: Run tests
-        run: |
-          ctest --test-dir build --build-config Release --output-on-failure
-
-  build-windows-x64:
-    runs-on: windows-latest
+  build:
+    name: Build (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-x64
+            runner: windows-2025
+            qt-host: windows
+            qt-arch: win64_msvc2022_64
+            architecture: amd64
+            cmake-architecture: x64
+            package-dir: SHOUConnect
+            extension: zip
+          - platform: windows-arm64
+            runner: windows-11-arm
+            qt-host: windows_arm64
+            qt-arch: win64_msvc2022_arm64
+            architecture: arm64
+            cmake-architecture: ARM64
+            package-dir: SHOUConnect
+            extension: zip
+          - platform: macos-arm64
+            runner: macos-26
+            qt-host: mac
+            qt-arch: clang_64
+            architecture: arm64
+            package-dir: SHOUConnect.app
+            extension: zip
+          - platform: linux-x64
+            runner: ubuntu-24.04
+            qt-host: linux
+            qt-arch: linux_gcc_64
+            architecture: x86_64
+            package-dir: AppDir
+            extension: AppImage
+          - platform: linux-arm64
+            runner: ubuntu-24.04-arm
+            qt-host: linux_arm64
+            qt-arch: linux_gcc_arm64
+            architecture: arm64
+            package-dir: AppDir
+            extension: AppImage
     env:
-      ARCHIVE_NAME: ${{ github.event.repository.name }}-${{ github.event.release.tag_name || 'nightly' }}-windows-x64
+      PLATFORM: ${{ matrix.platform }}
+      ARCHITECTURE: ${{ matrix.architecture }}
+      CMAKE_ARCHITECTURE: ${{ matrix.cmake-architecture }}
+      PACKAGE_DIR: ${{ matrix.package-dir }}
+      ARCHIVE_EXTENSION: ${{ matrix.extension }}
+      REPOSITORY_NAME: ${{ github.event.repository.name }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Refresh Linux package index
+        if: runner.os == 'Linux'
+        run: sudo apt-get update
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get install -y --no-install-recommends libevent-2.1-7t64 libminizip1t64
 
       - name: Install Qt
-        uses: jurplel/install-qt-action@v4
+        uses: jurplel/install-qt-action@v4.5.0
         with:
           version: ${{ env.QT_VERSION }}
-          host: 'windows'
-          target: 'desktop'
-          arch: 'win64_msvc2022_64'
-          modules: 'qt5compat qtpositioning qtwebchannel qtwebengine'
-          cache: 'true'
-          cache-key-prefix: 'install-qt-action-win64_msvc2022_64'
+          host: ${{ matrix.qt-host }}
+          target: desktop
+          arch: ${{ matrix.qt-arch }}
+          modules: >-
+            qt5compat qtpositioning qtwebchannel qtwebengine
+            ${{ runner.os == 'Linux' && 'qtserialport' || '' }}
+          cache: true
+          cache-key-prefix: qt-${{ matrix.runner }}-${{ matrix.platform }}
+          # aqt 3.3.0 predates native Windows ARM64 WebEngine support (aqtinstall#941).
+          aqtsource: >-
+            ${{ matrix.platform == 'windows-arm64'
+                && 'git+https://github.com/miurahr/aqtinstall.git@06bcc88d55d512e6db6756a587a9363d3f7c84e7'
+                || '' }}
 
       - name: Configure
-        env:
-          NIGHTLY_BUILD: ${{ inputs.nightly || github.event_name != 'release' }}
-          RELEASE_VERSION: ${{ inputs.version || github.event.release.tag_name }}
         run: |
-          mkdir build
-          if ( [bool]::Parse("${{ env.NIGHTLY_BUILD }}") ) {
-            cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DNIGHTLY_BUILD=ON -DQT_DEBUG_FIND_PACKAGE=ON -DGIT_HASH="$(git rev-parse --short=7 HEAD)" -S . -B build
-          } else {
-            $VER = "${{ env.RELEASE_VERSION }}".substring(1)
-            cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DNIGHTLY_BUILD=OFF -DREL_VER="$VER" -S . -B build
-          }
+          args=(-S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF)
+          archive_version=nightly
+          if [[ "$NIGHTLY_BUILD" == true ]]; then
+            args+=(-DNIGHTLY_BUILD=ON "-DGIT_HASH=$(git rev-parse --short=7 HEAD)")
+          else
+            version="${RELEASE_VERSION#v}"
+            if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+              echo '::error::A release build requires a version such as v1.2.3 or v1.2.3-rc.1.'
+              exit 1
+            fi
+            args+=(-DNIGHTLY_BUILD=OFF "-DREL_VER=$version")
+            archive_version="$RELEASE_VERSION"
+          fi
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            args+=(-A "$CMAKE_ARCHITECTURE")
+          elif [[ "$RUNNER_OS" == macOS ]]; then
+            args+=("-DCMAKE_OSX_ARCHITECTURES=$ARCHITECTURE")
+          fi
+          cmake "${args[@]}"
+          archive_name="$REPOSITORY_NAME-$archive_version-$PLATFORM"
+          {
+            echo "ARCHIVE_NAME=$archive_name"
+            echo "ARCHIVE_PATH=$archive_name.$ARCHIVE_EXTENSION"
+            echo "CMAKE_BUILD_PARALLEL_LEVEL=$(python -c 'import os; print(os.cpu_count() or 2)')"
+          } >> "$GITHUB_ENV"
 
       - name: Build
-        run: |
-          cmake --build build --target ${{ env.TARGET_NAME }} --config Release --parallel $(nproc)
+        run: cmake --build build --target "$TARGET_NAME" --config Release
 
-      - name: Download and copy files
+      - name: Package Windows
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          .\scripts\deploy-windows.ps1 -TargetName "${{ env.TARGET_NAME }}" -DisplayName "${{ env.DISPLAY_NAME }}" -BuildDir "build" -Architecture "amd64" -Nightly ${{ github.event_name == 'workflow_dispatch' && inputs.zju_connect_nightly }}
-          Compress-Archive -Path "${{ env.DISPLAY_NAME }}" -DestinationPath ${{ env.ARCHIVE_NAME }}.zip -CompressionLevel Optimal
-          python scripts/package_tools.py report "${{ env.DISPLAY_NAME }}" --archive "${{ env.ARCHIVE_NAME }}.zip" --output package-size.json
-          if ($LASTEXITCODE -ne 0) { throw 'Package size report failed' }
+          ./scripts/deploy-windows.ps1 -TargetName $env:TARGET_NAME -DisplayName $env:DISPLAY_NAME `
+            -BuildDir build -Architecture $env:ARCHITECTURE -Nightly $env:CORE_NIGHTLY
+          Compress-Archive -LiteralPath $env:DISPLAY_NAME -DestinationPath $env:ARCHIVE_PATH -CompressionLevel Optimal
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.ARCHIVE_NAME }}
-          path: ${{ env.ARCHIVE_NAME }}.zip
-
-      - name: Upload size reports
-        uses: actions/upload-artifact@v4
-        with:
-          name: size-${{ env.ARCHIVE_NAME }}
-          path: |
-            package-size.json
-            package-pruning.json
-
-  build-windows-arm64:
-    runs-on: windows-11-arm
-    env:
-      ARCHIVE_NAME: ${{ github.event.repository.name }}-${{ github.event.release.tag_name || 'nightly' }}-windows-arm64
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install host Qt
-        uses: jurplel/install-qt-action@v4
-        with:
-          version: ${{ env.QT_VERSION }}
-          host: 'windows_arm64'
-          target: 'desktop'
-          arch: 'win64_msvc2022_arm64'
-          modules: 'qt5compat qtpositioning qtwebchannel qtwebengine'
-          cache: 'true'
-          cache-key-prefix: 'install-qt-action-win64_msvc2022_arm64'
-          aqtsource: 'git+https://github.com/miurahr/aqtinstall.git'  # workaround for Qt6 WebEngine on Windows ARM64
-
-      - name: Configure
-        env:
-          NIGHTLY_BUILD: ${{ inputs.nightly || github.event_name != 'release' }}
-          RELEASE_VERSION: ${{ inputs.version || github.event.release.tag_name }}
+      - name: Package macOS
+        if: runner.os == 'macOS'
         run: |
-          mkdir build
-          if ( [bool]::Parse("${{ env.NIGHTLY_BUILD }}") ) {
-            cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DNIGHTLY_BUILD=ON -DQT_DEBUG_FIND_PACKAGE=ON -DGIT_HASH="$(git rev-parse --short=7 HEAD)" -S . -B build
-          } else {
-            $VER = "${{ env.RELEASE_VERSION }}".substring(1)
-            cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DNIGHTLY_BUILD=OFF -DREL_VER="$VER" -S . -B build
-          }
+          ./scripts/deploy-macos.sh "$TARGET_NAME" build "$ARCHITECTURE" "$CORE_NIGHTLY"
+          ditto -c -k --sequesterRsrc --keepParent "$TARGET_NAME.app" "$ARCHIVE_PATH"
 
-      - name: Build
+      - name: Package Linux
+        if: runner.os == 'Linux'
         run: |
-          cmake --build build --target ${{ env.TARGET_NAME }} --config Release --parallel $(nproc)
-
-      - name: Download and copy files
-        shell: pwsh
-        run: |
-          .\scripts\deploy-windows.ps1 -TargetName "${{ env.TARGET_NAME }}" -DisplayName "${{ env.DISPLAY_NAME }}" -BuildDir "build" -Architecture "arm64" -Nightly ${{ github.event_name == 'workflow_dispatch' && inputs.zju_connect_nightly }}
-          Compress-Archive -Path "${{ env.DISPLAY_NAME }}" -DestinationPath ${{ env.ARCHIVE_NAME }}.zip -CompressionLevel Optimal
-          python scripts/package_tools.py report "${{ env.DISPLAY_NAME }}" --archive "${{ env.ARCHIVE_NAME }}.zip" --output package-size.json
-          if ($LASTEXITCODE -ne 0) { throw 'Package size report failed' }
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.ARCHIVE_NAME }}
-          path: ${{ env.ARCHIVE_NAME }}.zip
-
-      - name: Upload size reports
-        uses: actions/upload-artifact@v4
-        with:
-          name: size-${{ env.ARCHIVE_NAME }}
-          path: |
-            package-size.json
-            package-pruning.json
-
-  build-macos-arm64:
-    runs-on: macos-26
-    env:
-      ARCHIVE_NAME: ${{ github.event.repository.name }}-${{ github.event.release.tag_name || 'nightly' }}-macos-arm64
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Qt
-        uses: jurplel/install-qt-action@v4
-        with:
-          version: ${{ env.QT_VERSION }}
-          host: 'mac'
-          target: 'desktop'
-          arch: 'clang_64'
-          modules: 'qt5compat qtpositioning qtwebchannel qtwebengine'
-          cache: 'true'
-          cache-key-prefix: 'install-qt-action-macos_clang_arm64'
-
-      - name: Configure
-        env:
-          NIGHTLY_BUILD: ${{ inputs.nightly || github.event_name != 'release' }}
-          RELEASE_VERSION: ${{ inputs.version || github.event.release.tag_name }}
-        run: |
-          mkdir build
-          if ${{ env.NIGHTLY_BUILD }} ; then
-            cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DNIGHTLY_BUILD=ON -DQT_DEBUG_FIND_PACKAGE=ON -DGIT_HASH=$(git rev-parse --short=7 HEAD) -DCMAKE_OSX_ARCHITECTURES="arm64" -S . -B build
-          else
-            VER=${{ env.RELEASE_VERSION }}
-            cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DNIGHTLY_BUILD=OFF -DREL_VER=${VER#v} -DCMAKE_OSX_ARCHITECTURES="arm64" -S . -B build
+          ./scripts/deploy-linux.sh "$TARGET_NAME" "$DISPLAY_NAME" build "$ARCHITECTURE" "$CORE_NIGHTLY"
+          appimages=(./*.AppImage)
+          if [[ ${#appimages[@]} -ne 1 || ! -f "${appimages[0]}" ]]; then
+            echo '::error::Expected exactly one AppImage.'
+            exit 1
           fi
+          mv -- "${appimages[0]}" "$ARCHIVE_PATH"
 
-      - name: Build
-        run: |
-          cmake --build build --target ${{ env.TARGET_NAME }} --parallel $(nproc)
+      - name: Report package size
+        run: python scripts/package_tools.py report "$PACKAGE_DIR" --archive "$ARCHIVE_PATH" --output package-size.json
 
-      - name: Download and copy files
-        run: |
-          ./scripts/deploy-macos.sh "${{ env.TARGET_NAME }}" "build" "arm64" "${{ github.event_name == 'workflow_dispatch' && inputs.zju_connect_nightly }}"
-
-      - name: Package zip file
-        run: |
-          ditto -c -k --sequesterRsrc --keepParent \
-            "${{ env.TARGET_NAME }}.app" \
-            "${{ env.ARCHIVE_NAME }}.zip"
-          python3 scripts/package_tools.py report "${{ env.TARGET_NAME }}.app" --archive "${{ env.ARCHIVE_NAME }}.zip" --output package-size.json
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload package
+        uses: actions/upload-artifact@v7.0.2
         with:
-          name: ${{ env.ARCHIVE_NAME }}
-          path: ${{ env.ARCHIVE_NAME }}.zip
+          path: ${{ env.ARCHIVE_PATH }}
+          if-no-files-found: error
+          archive: false
 
       - name: Upload size reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: size-${{ env.ARCHIVE_NAME }}
           path: |
             package-size.json
             package-pruning.json
-
-  build-linux-x64:
-    runs-on: ubuntu-22.04
-    env:
-      ARCHIVE_NAME: ${{ github.event.repository.name }}-${{ github.event.release.tag_name || 'nightly' }}-linux-x64
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Qt
-        uses: jurplel/install-qt-action@v4
-        with:
-          version: ${{ env.QT_VERSION }}
-          host: 'linux'
-          target: 'desktop'
-          arch: 'linux_gcc_64'
-          modules: 'qt5compat qtpositioning qtserialport qtwebchannel qtwebengine'
-          cache: 'true'
-          cache-key-prefix: 'install-qt-action-linux_gcc_64'
-
-      - name: Configure
-        env:
-          NIGHTLY_BUILD: ${{ inputs.nightly || github.event_name != 'release' }}
-          RELEASE_VERSION: ${{ inputs.version || github.event.release.tag_name }}
-        run: |
-          mkdir build
-          if ${{ env.NIGHTLY_BUILD }} ; then
-            cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DNIGHTLY_BUILD=ON -DQT_DEBUG_FIND_PACKAGE=ON -DGIT_HASH=$(git rev-parse --short=7 HEAD) -S . -B build
-          else
-            VER=${{ env.RELEASE_VERSION }}
-            cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DNIGHTLY_BUILD=OFF -DREL_VER=${VER#v} -S . -B build
-          fi
-
-      - name: Build
-        run: |
-          cmake --build build --target ${{ env.TARGET_NAME }} --parallel $(nproc)
-
-      - name: Download and copy files
-        run: |
-          ./scripts/deploy-linux.sh "${{ env.TARGET_NAME }}" "${{ env.DISPLAY_NAME }}" "build" "x86_64" "${{ github.event_name == 'workflow_dispatch' && inputs.zju_connect_nightly }}"
-          mv *.AppImage ${{ env.ARCHIVE_NAME }}.AppImage
-          python3 scripts/package_tools.py report AppDir --archive "${{ env.ARCHIVE_NAME }}.AppImage" --output package-size.json
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.ARCHIVE_NAME }}
-          path: ${{ env.ARCHIVE_NAME }}.AppImage
-
-      - name: Upload size reports
-        uses: actions/upload-artifact@v4
-        with:
-          name: size-${{ env.ARCHIVE_NAME }}
-          path: |
-            package-size.json
-            package-pruning.json
-
-  build-linux-arm64:
-    runs-on: ubuntu-24.04-arm
-    env:
-      ARCHIVE_NAME: ${{ github.event.repository.name }}-${{ github.event.release.tag_name || 'nightly' }}-linux-arm64
-    steps:
-      - uses: actions/checkout@v4
-        
-      - name: Setup dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libevent-2.1-7t64 libminizip1t64
-
-      - name: Install Qt
-        uses: jdpurcell/install-qt-action@v5
-        with:
-          version: ${{ env.QT_VERSION }}
-          host: 'linux_arm64'
-          target: 'desktop'
-          arch: 'linux_gcc_arm64'
-          modules: 'qt5compat qtpositioning qtserialport qtwebchannel qtwebengine'
-          cache: 'true'
-          cache-key-prefix: 'install-qt-action-linux_arm64'
-
-      - name: Configure
-        env:
-          NIGHTLY_BUILD: ${{ inputs.nightly || github.event_name != 'release' }}
-          RELEASE_VERSION: ${{ inputs.version || github.event.release.tag_name }}
-        run: |
-          mkdir build
-          if ${{ env.NIGHTLY_BUILD }} ; then
-            cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DNIGHTLY_BUILD=ON -DQT_DEBUG_FIND_PACKAGE=ON -DGIT_HASH=$(git rev-parse --short=7 HEAD) -S . -B build
-          else
-            VER=${{ env.RELEASE_VERSION }}
-            cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DNIGHTLY_BUILD=OFF -DREL_VER=${VER#v} -S . -B build
-          fi
-
-      - name: Build
-        run: |
-          cmake --build build --target ${{ env.TARGET_NAME }} --parallel $(nproc)
-
-      - name: Download and copy files
-        run: |
-          ./scripts/deploy-linux.sh "${{ env.TARGET_NAME }}" "${{ env.DISPLAY_NAME }}" "build" "arm64" "${{ github.event_name == 'workflow_dispatch' && inputs.zju_connect_nightly }}"
-          mv *.AppImage ${{ env.ARCHIVE_NAME }}.AppImage
-          python3 scripts/package_tools.py report AppDir --archive "${{ env.ARCHIVE_NAME }}.AppImage" --output package-size.json
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.ARCHIVE_NAME }}
-          path: ${{ env.ARCHIVE_NAME }}.AppImage
-
-      - name: Upload size reports
-        uses: actions/upload-artifact@v4
-        with:
-          name: size-${{ env.ARCHIVE_NAME }}
-          path: |
-            package-size.json
-            package-pruning.json
+          if-no-files-found: error
 
   release:
-    runs-on: ubuntu-latest
     if: github.event_name == 'release'
-    needs:
-      - unit-tests
-      - build-windows-x64
-      - build-windows-arm64
-      - build-macos-arm64
-      - build-linux-x64
-      - build-linux-arm64
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
     env:
-      ARCHIVE_PREFIX: ${{ github.event.repository.name }}-${{ github.event.release.tag_name || 'nightly' }}
-      AUR_PACKAGE_NAME: ez4connect
+      ARCHIVE_PREFIX: ${{ github.event.repository.name }}-${{ github.event.release.tag_name }}
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
+      - name: Download packages
+        uses: actions/download-artifact@v8.0.2
         with:
           pattern: ${{ env.ARCHIVE_PREFIX }}-*
+          path: dist
           merge-multiple: true
+          skip-decompress: true
 
-      - name: Upload to release
+      - name: Upload release assets
         env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          gh release upload ${{ github.event.release.tag_name }} ${{ env.ARCHIVE_PREFIX }}-*
-
-      - name: Update AUR PKGBUILD
-        if: ${{ !github.event.release.prerelease }}
-        env:
-          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
-        run: |
-          if [ -z "$AUR_SSH_PRIVATE_KEY" ]; then
-            echo "AUR_SSH_PRIVATE_KEY is not set, skipping AUR update."
-            exit 0
-          fi
-
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/aur
-          chmod 600 ~/.ssh/aur
-          ssh-keyscan aur.archlinux.org >> ~/.ssh/known_hosts
-
-          export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/aur -o IdentitiesOnly=yes"
-          git clone ssh://aur@aur.archlinux.org/${{ env.AUR_PACKAGE_NAME }}.git aur
-          cd aur
-
-          sudo apt-get update
-          sudo apt-get install -y pacman-package-manager
-
-          VERSION="${RELEASE_TAG#v}"
-          PKG_VERSION="${VERSION%%-*}"
-          CURRENT_PKG_VERSION="$(sed -n 's/^pkgver=//p' PKGBUILD)"
-          CURRENT_PKG_REL="$(sed -n 's/^pkgrel=//p' PKGBUILD)"
-          if [ "$CURRENT_PKG_VERSION" = "$PKG_VERSION" ]; then
-            PKG_REL=$((CURRENT_PKG_REL + 1))
-          else
-            PKG_REL=1
-          fi
-
-          if grep -q '^_releasever=' PKGBUILD; then
-            sed -i "s/^_releasever=.*/_releasever=${VERSION}/" PKGBUILD
-          else
-            sed -i "/^pkgrel=/a _releasever=${VERSION}" PKGBUILD
-          fi
-          sed -i 's/${pkgver}/${_releasever}/g' PKGBUILD
-
-          SOURCE_URL="https://github.com/chenx-dust/EZ4Connect/archive/refs/tags/v${VERSION}.tar.gz"
-          SOURCE_SHA256="$(curl -L "$SOURCE_URL" | sha256sum | awk '{print $1}')"
-
-          sed -i "s/^pkgver=.*/pkgver=${PKG_VERSION}/" PKGBUILD
-          sed -i "s/^pkgrel=.*/pkgrel=${PKG_REL}/" PKGBUILD
-          sed -i "s/^sha256sums=.*/sha256sums=('${SOURCE_SHA256}')/" PKGBUILD
-          makepkg --printsrcinfo > .SRCINFO
-
-          if git diff --quiet; then
-            echo "No AUR changes to commit."
-            exit 0
-          fi
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add PKGBUILD .SRCINFO
-          git commit -m "Update to ${VERSION}"
-          git push
+        run: gh release upload "$RELEASE_TAG" dist/"$ARCHIVE_PREFIX"-* --repo "$GH_REPO" --clobber
