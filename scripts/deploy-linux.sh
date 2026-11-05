@@ -56,16 +56,15 @@ if [ "$ARCH" = "x86_64" ]; then
     ZJU_ARCH="amd64"
 fi
 
-core_options=()
+core_options=(fetch-core AppDir/usr/bin --platform linux --architecture "$ZJU_ARCH")
 if [ "$NIGHTLY" = "true" ]; then core_options+=(--nightly); fi
-python3 "$SCRIPT_DIR/package_tools.py" fetch-core AppDir/usr/bin \
-    --platform linux --architecture "$ZJU_ARCH" "${core_options[@]}"
+python3 "$SCRIPT_DIR/package_tools.py" "${core_options[@]}"
 
 # Copy icon
 cp resource/icon.png "AppDir/usr/share/icons/hicolor/scalable/apps/$TARGET_NAME.png"
 
 # Create desktop file
-cat > "AppDir/usr/share/applications/$TARGET_NAME.desktop" <<EOF
+cat >"AppDir/usr/share/applications/$TARGET_NAME.desktop" <<EOF
 [Desktop Entry]
 Name=$DISPLAY_NAME
 Exec=$TARGET_NAME

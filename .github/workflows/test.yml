@@ -1,0 +1,55 @@
+name: Test
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  QT_VERSION: "6.10.3"
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libevent-2.1-7t64 libminizip1t64
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4.5.0
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: linux
+          target: desktop
+          arch: linux_gcc_64
+          modules: qt5compat qtpositioning qtserialport qtwebchannel qtwebengine
+          cache: true
+          cache-key-prefix: qt-ubuntu-24.04-x64
+
+      - name: Configure tests
+        run: cmake -S . -B build -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build tests
+        run: cmake --build build --config Release --parallel "$(nproc)"
+
+      - name: Run tests
+        run: ctest --test-dir build --build-config Release --output-on-failure --no-tests=error

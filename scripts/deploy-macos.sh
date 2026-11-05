@@ -26,10 +26,9 @@ if [ "$ARCH" = "x86_64" ]; then
     ZJU_ARCH="amd64"
 fi
 
-core_options=()
+core_options=(fetch-core "$APP_PATH/Contents/MacOS" --platform darwin --architecture "$ZJU_ARCH")
 if [ "$NIGHTLY" = "true" ]; then core_options+=(--nightly); fi
-python3 "$SCRIPT_DIR/package_tools.py" fetch-core "$APP_PATH/Contents/MacOS" \
-    --platform darwin --architecture "$ZJU_ARCH" "${core_options[@]}"
+python3 "$SCRIPT_DIR/package_tools.py" "${core_options[@]}"
 
 # Run macdeployqt
 macdeployqt "$APP_PATH"
