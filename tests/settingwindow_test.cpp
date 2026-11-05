@@ -8,6 +8,7 @@
 #include <QRadioButton>
 #include <QSettings>
 #include <QStandardPaths>
+#include <QTabWidget>
 #include <QTemporaryDir>
 
 #include "application/defaultsettings.h"
@@ -31,14 +32,16 @@ bool editsSharedTotp(const QString &path, const QString &protocol)
     auto *atrust = dialog.findChild<QRadioButton *>("atrustRadioButton");
     auto *easyconnect = dialog.findChild<QRadioButton *>("easyconnectRadioButton");
     auto *buttons = dialog.findChild<QDialogButtonBox *>("buttonBox");
-    if (!totp || !show || !common || !atrust || !easyconnect || !buttons
-        || !common->isAncestorOf(totp) || !common->isAncestorOf(show)
-        || !totp->isEnabled() || totp->text() != "legacy-secret"
-        || totp->echoMode() != QLineEdit::Password)
+    auto *tabs = dialog.findChild<QTabWidget *>("tabWidget");
+    auto *loginTab = dialog.findChild<QWidget *>("loginTab");
+    if (!totp || !show || !common || !atrust || !easyconnect || !buttons || !tabs || !loginTab ||
+        !common->isAncestorOf(totp) || !common->isAncestorOf(show) || !totp->isEnabled() ||
+        totp->text() != "legacy-secret" || totp->echoMode() != QLineEdit::Password)
     {
         qCritical() << "Shared TOTP controls unavailable for" << protocol;
         return false;
     }
+    tabs->setCurrentWidget(loginTab);
     dialog.show();
     if (!totp->isVisible())
         return false;
