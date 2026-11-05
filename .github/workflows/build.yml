@@ -1,11 +1,6 @@
 name: Build and release
 
 on:
-  release:
-    types: [published]
-  push:
-    branches: [main, dev]
-  pull_request:
   workflow_dispatch:
     inputs:
       nightly:
@@ -20,13 +15,17 @@ on:
         type: string
         default: ""
         description: "Release version when nightly is disabled (e.g. v0.0.0)"
+      publish_release:
+        type: boolean
+        default: false
+        description: "Upload to the existing release for version (requires nightly disabled)"
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 defaults:
   run:
@@ -36,9 +35,9 @@ env:
   QT_VERSION: "6.10.3"
   TARGET_NAME: "SHOUConnect"
   DISPLAY_NAME: "SHOUConnect"
-  NIGHTLY_BUILD: ${{ github.event_name != 'release' && (github.event_name != 'workflow_dispatch' || inputs.nightly) }}
-  RELEASE_VERSION: ${{ inputs.version || github.event.release.tag_name }}
-  CORE_NIGHTLY: ${{ github.event_name == 'workflow_dispatch' && inputs.zju_connect_nightly }}
+  NIGHTLY_BUILD: ${{ inputs.nightly }}
+  RELEASE_VERSION: ${{ inputs.version }}
+  CORE_NIGHTLY: ${{ inputs.zju_connect_nightly }}
 
 jobs:
   build:
@@ -94,6 +93,12 @@ jobs:
       ARCHIVE_EXTENSION: ${{ matrix.extension }}
       REPOSITORY_NAME: ${{ github.event.repository.name }}
     steps:
+      - name: Validate release options
+        if: inputs.publish_release && inputs.nightly
+        run: |
+          echo '::error::Disable nightly and provide a version to publish release assets.'
+          exit 1
+
       - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
@@ -200,14 +205,14 @@ jobs:
           if-no-files-found: error
 
   release:
-    if: github.event_name == 'release'
+    if: inputs.publish_release
     needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: write
     env:
-      ARCHIVE_PREFIX: ${{ github.event.repository.name }}-${{ github.event.release.tag_name }}
+      ARCHIVE_PREFIX: ${{ github.event.repository.name }}-${{ inputs.version }}
     steps:
       - name: Download packages
         uses: actions/download-artifact@v8.0.2
@@ -221,5 +226,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TAG: ${{ inputs.version }}
         run: gh release upload "$RELEASE_TAG" dist/"$ARCHIVE_PREFIX"-* --repo "$GH_REPO" --clobber
