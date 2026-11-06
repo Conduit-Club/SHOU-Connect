@@ -389,13 +389,13 @@
           <item row="4" column="1" colspan="3">
            <widget class="QLineEdit" name="totpSecretLineEdit">
             <property name="toolTip">
-             <string>可选，填写验证器密钥可自动生成验证码；留空则在服务器要求时手动输入。</string>
+            <string>可选，填写验证器密钥可自动生成验证码；支持直接粘贴 otpauth:// 链接，将自动提取密钥。留空则在服务器要求时手动输入。</string>
             </property>
             <property name="echoMode">
              <enum>QLineEdit::EchoMode::Password</enum>
             </property>
             <property name="placeholderText">
-             <string>可选，TOTP 验证器密钥</string>
+            <string>可选，TOTP 验证器密钥或 otpauth:// 链接</string>
             </property>
            </widget>
           </item>

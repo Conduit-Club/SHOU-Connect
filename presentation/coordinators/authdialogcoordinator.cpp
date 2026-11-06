@@ -308,8 +308,11 @@ void AuthDialogCoordinator::requestSsoLogin()
     }
     if (ssoLoginWebView != nullptr)
     {
-        ssoLoginWebView->raise();
-        ssoLoginWebView->activateWindow();
+        if (ssoLoginWebView->isVisible())
+        {
+            ssoLoginWebView->raise();
+            ssoLoginWebView->activateWindow();
+        }
         return;
     }
 
@@ -346,11 +349,28 @@ void AuthDialogCoordinator::requestSsoLogin()
     ssoLoginWebView = new SsoLoginWebView(parentWidget);
     ssoLoginWebView->setAttribute(Qt::WA_DeleteOnClose);
     ssoLoginWebView->setCallbackServerUrl(serverUrl);
-    ssoLoginWebView->setInitialUrl(QUrl::fromUserInput(ssoUrl));
+
+    const QString savedUsername =
+        settings->value("Credential/Username").toString();
+    const QString savedPassword = QString::fromUtf8(
+        QByteArray::fromBase64(settings->value("Credential/Password").toByteArray())
+    );
+    const bool canAutoFill =
+        !savedUsername.isEmpty() && !savedPassword.isEmpty();
+    if (canAutoFill)
+    {
+        ssoLoginWebView->setAutoFillCredentials(savedUsername, savedPassword);
+    }
+
     connect(ssoLoginWebView, &SsoLoginWebView::loginCompleted, this,
             [this](const QString &url)
             {
                 emit interactiveInputSubmitted(url.toLocal8Bit() + "\n");
             });
-    ssoLoginWebView->show();
+
+    ssoLoginWebView->setInitialUrl(QUrl::fromUserInput(ssoUrl));
+    if (!canAutoFill)
+    {
+        ssoLoginWebView->show();
+    }
 }
