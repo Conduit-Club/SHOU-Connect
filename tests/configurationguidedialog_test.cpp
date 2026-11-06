@@ -1,6 +1,7 @@
 #include <QApplication>
 #include <QCheckBox>
 #include <QDebug>
+#include <QGroupBox>
 #include <QLineEdit>
 #include <QList>
 #include <QPair>
@@ -177,18 +178,31 @@ bool savesCertificateCredentials(const QString &settingsPath)
     return passed;
 }
 
-bool showsSsoWithoutCredentialFields(const QString &settingsPath)
+bool showsCasCredentialFields(const QString &settingsPath)
 {
     QSettings settings(settingsPath, QSettings::IniFormat);
     settings.setValue("SHOUConnect/Protocol", "atrust");
     settings.setValue("SHOUConnect/AuthType", "cas");
+    settings.setValue("Credential/Username", "20260001");
+    settings.setValue(
+        "Credential/Password",
+        QString(QStringLiteral("p\u00e4ssword").toUtf8().toBase64())
+    );
 
     ConfigurationGuideDialog dialog(nullptr, &settings);
     QStackedWidget *pages = credentialPages(dialog);
-    const bool passed = pages != nullptr && pages->currentIndex() == 3;
+    QLineEdit *username = lineEdit(dialog, "guideUsernameLineEdit");
+    QLineEdit *password = lineEdit(dialog, "guidePasswordLineEdit");
+    auto *group = qobject_cast<QGroupBox *>(
+        dialog.findChild<QWidget *>("guideCredentialsGroupBox")
+    );
+    const bool passed = pages != nullptr && pages->currentIndex() == 0
+        && username != nullptr && username->text() == "20260001"
+        && password != nullptr && password->text() == QStringLiteral("p\u00e4ssword")
+        && group != nullptr && group->title().contains("CAS");
     if (!passed)
     {
-        qCritical() << "CAS did not select the credential-free guide page";
+        qCritical() << "CAS did not select the credential guide page";
     }
     return passed;
 }
@@ -313,7 +327,7 @@ int main(int argc, char *argv[])
         savesPasswordCredentials(directory.filePath("password.ini"))
         && savesSmsCredentials(directory.filePath("sms.ini"))
         && savesCertificateCredentials(directory.filePath("certificate.ini"))
-        && showsSsoWithoutCredentialFields(directory.filePath("sso.ini"))
+        && showsCasCredentialFields(directory.filePath("sso.ini"))
         && sharesTotpAcrossAuthenticationMethods(directory.path())
         && keepsProfileSecretsSeparate(directory.path())
         && defaultsToSchoolCasAndInvalidatesOnServerChange(directory.path());

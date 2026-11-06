@@ -51,6 +51,8 @@
 项目的分层、依赖方向和新增代码归属规则见
 [架构说明](docs/ARCHITECTURE.md)。
 
+本地编译生成的 `build/Release/SHOUConnect.exe` 不包含 Qt 运行库，不能直接双击启动；请用 `scripts/deploy-windows.ps1` 生成完整运行目录，打包说明见 [打包与体积检查](docs/PACKAGING.md)。
+
 ## 许可证
 
 本项目遵循 [GNU General Public License Version 3](LICENSE) 开源。

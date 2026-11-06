@@ -1,5 +1,8 @@
 #include "settingsprofileloader.h"
 
+#include <QUrl>
+#include <QUrlQuery>
+
 ConnectionProfile SettingsProfileLoader::load(
     const QSettings &settings,
     const QString &profileId,
@@ -21,7 +24,9 @@ ConnectionProfile SettingsProfileLoader::load(
     profile.credentials = {
         username,
         password,
-        settings.value("Credential/TOTPSecret").toString(),
+        SettingsProfileLoader::normalizeTotpSecret(
+            settings.value("Credential/TOTPSecret").toString()
+        ),
         useCertificate
             ? settings.value("Credential/CertFile", "").toString()
             : QString(),
@@ -100,4 +105,16 @@ ConnectionProfile SettingsProfileLoader::load(
 
     profile.extraArguments = settings.value("SHOUConnect/ExtraArguments", "").toString();
     return profile;
+}
+
+QString SettingsProfileLoader::normalizeTotpSecret(const QString &raw)
+{
+    const QString trimmed = raw.trimmed();
+    if (!trimmed.startsWith(QStringLiteral("otpauth://"), Qt::CaseInsensitive))
+        return trimmed;
+
+    const QUrl url(trimmed, QUrl::TolerantMode);
+    const QUrlQuery query(url);
+    const QString secret = query.queryItemValue(QStringLiteral("secret")).trimmed();
+    return secret;
 }

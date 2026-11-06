@@ -1,4 +1,5 @@
 #include "configurationguidedialog.h"
+#include "infrastructure/settings/settingsprofileloader.h"
 
 #include <QCheckBox>
 #include <QFileDialog>
@@ -130,8 +131,8 @@ ConfigurationGuideDialog::ConfigurationGuideDialog(
     usernameLineEdit->setText(
         sourceSettings->value("Credential/Username").toString()
     );
-    passwordLineEdit->setText(QByteArray::fromBase64(
-        sourceSettings->value("Credential/Password").toByteArray()
+    passwordLineEdit->setText(QString::fromUtf8(
+        QByteArray::fromBase64(sourceSettings->value("Credential/Password").toByteArray())
     ));
     totpSecretLineEdit->setText(
         sourceSettings->value("Credential/TOTPSecret").toString()
@@ -145,8 +146,8 @@ ConfigurationGuideDialog::ConfigurationGuideDialog(
     certificateFileLineEdit->setText(
         sourceSettings->value("Credential/CertFile").toString()
     );
-    certificatePasswordLineEdit->setText(QByteArray::fromBase64(
-        sourceSettings->value("Credential/CertPassword").toByteArray()
+    certificatePasswordLineEdit->setText(QString::fromUtf8(
+        QByteArray::fromBase64(sourceSettings->value("Credential/CertPassword").toByteArray())
     ));
 
     updateProtocolPage();
@@ -170,7 +171,7 @@ void ConfigurationGuideDialog::applyTo(QSettings &settings) const
     );
     settings.setValue(
         "Credential/TOTPSecret",
-        totpSecretLineEdit->text().trimmed()
+        SettingsProfileLoader::normalizeTotpSecret(totpSecretLineEdit->text())
     );
     settings.setValue(
         "Credential/CertFile",
@@ -360,14 +361,17 @@ QWidget *ConfigurationGuideDialog::createCredentialsPage()
 
     auto *passwordPage = new QWidget(credentialPages);
     auto *passwordPageLayout = new QVBoxLayout(passwordPage);
-    auto *passwordGroup = new QGroupBox("账号凭据", passwordPage);
+    casCredentialsGroup = new QGroupBox("账号凭据", passwordPage);
+    casCredentialsGroup->setObjectName("guideCredentialsGroupBox");
+    auto *passwordGroup = casCredentialsGroup;
     auto *passwordForm = new QFormLayout(passwordGroup);
     passwordForm->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
 
     usernameLineEdit = new QLineEdit(passwordGroup);
     usernameLineEdit->setObjectName("guideUsernameLineEdit");
-    usernameLineEdit->setPlaceholderText("VPN 账号");
-    passwordForm->addRow("账号", usernameLineEdit);
+    usernameLineEdit->setPlaceholderText("VPN 账号或 CAS 学工号/安全手机");
+    casUsernameLabel = new QLabel("账号", passwordGroup);
+    passwordForm->addRow(casUsernameLabel, usernameLineEdit);
 
     auto *passwordRow = new QWidget(passwordGroup);
     auto *passwordRowLayout = new QHBoxLayout(passwordRow);
@@ -379,7 +383,8 @@ QWidget *ConfigurationGuideDialog::createCredentialsPage()
     auto *showPasswordCheckBox = new QCheckBox("显示", passwordRow);
     passwordRowLayout->addWidget(passwordLineEdit, 1);
     passwordRowLayout->addWidget(showPasswordCheckBox);
-    passwordForm->addRow("密码", passwordRow);
+    casPasswordLabel = new QLabel("密码", passwordGroup);
+    passwordForm->addRow(casPasswordLabel, passwordRow);
 
     passwordPageLayout->addWidget(passwordGroup);
     passwordPageLayout->addStretch();
@@ -482,7 +487,7 @@ QWidget *ConfigurationGuideDialog::createCredentialsPage()
     totpSecretLineEdit = new QLineEdit(totpRow);
     totpSecretLineEdit->setObjectName("guideTotpSecretLineEdit");
     totpSecretLineEdit->setEchoMode(QLineEdit::Password);
-    totpSecretLineEdit->setPlaceholderText("可选，TOTP 验证器密钥");
+    totpSecretLineEdit->setPlaceholderText("可选，TOTP 验证器密钥或 otpauth:// 链接");
     auto *showTotpCheckBox = new QCheckBox("显示", totpRow);
     showTotpCheckBox->setObjectName("guideTotpSecretVisibleCheckBox");
     totpRowLayout->addWidget(totpSecretLineEdit, 1);
@@ -490,7 +495,8 @@ QWidget *ConfigurationGuideDialog::createCredentialsPage()
     totpForm->addRow("TOTP 密钥", totpRow);
 
     auto *totpHelp = new QLabel(
-        "可选，填写验证器密钥可自动生成验证码；留空则在服务器要求时手动输入。",
+        "可选，填写验证器密钥可自动生成验证码；支持直接粘贴 otpauth:// "
+        "链接，将自动提取密钥。留空则在服务器要求时手动输入。",
         totpGroup
     );
     totpHelp->setWordWrap(true);
@@ -567,6 +573,16 @@ void ConfigurationGuideDialog::updateCredentialsPage()
         return;
     }
 
+    const bool schoolCasPage = atrustRadioButton->isChecked()
+        && selectedAuthType == QLatin1String("cas");
+    casCredentialsGroup->setTitle(
+        schoolCasPage ? QStringLiteral("CAS 静默登录凭据") : QStringLiteral("账号凭据")
+    );
+    casUsernameLabel->setText(
+        schoolCasPage ? QStringLiteral("学工号/安全手机") : QStringLiteral("账号")
+    );
+    casPasswordLabel->setText(QStringLiteral("密码"));
+
     if (!atrustRadioButton->isChecked())
     {
         credentialPages->setCurrentIndex(
@@ -581,7 +597,7 @@ void ConfigurationGuideDialog::updateCredentialsPage()
     }
     else if (selectedAuthType == "cas" || selectedAuthType == "httpsOauth2")
     {
-        credentialPages->setCurrentIndex(3);
+        credentialPages->setCurrentIndex(selectedAuthType == "cas" ? 0 : 3);
     }
     else
     {
@@ -644,6 +660,7 @@ bool ConfigurationGuideDialog::validateCurrentPage()
     else if (pages->currentIndex() == 3)
     {
         if (credentialPages->currentIndex() == 0
+            && selectedAuthType != QLatin1String("cas")
             && (usernameLineEdit->text().trimmed().isEmpty()
                 || passwordLineEdit->text().isEmpty()))
         {

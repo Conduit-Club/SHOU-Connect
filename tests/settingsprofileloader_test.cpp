@@ -185,6 +185,44 @@ bool respectsEasyConnectAuthenticationMode()
     }
     return passed;
 }
+
+bool normalizesOtpauthTotpSecret()
+{
+    // Raw secret passes through untouched.
+    if (SettingsProfileLoader::normalizeTotpSecret("  RAWSECRET  ") != "RAWSECRET")
+    {
+        qCritical() << "raw secret not trimmed";
+        return false;
+    }
+
+    // otpauth URL yields only the secret query parameter.
+    const QString url = QString::fromUtf8(
+        "otpauth://totp/cas%20user-2521213?secret=EXAMPLESECRET123&issuer=cas"
+    );
+    if (SettingsProfileLoader::normalizeTotpSecret(url) != "EXAMPLESECRET123")
+    {
+        qCritical() << "otpauth secret not extracted";
+        return false;
+    }
+
+    // Case-insensitive scheme and surrounding whitespace are tolerated.
+    if (SettingsProfileLoader::normalizeTotpSecret(
+            "  OTPAUTH://totp/label?secret=ABCDEF  ") != "ABCDEF")
+    {
+        qCritical() << "case-insensitive otpauth not handled";
+        return false;
+    }
+
+    // Non-otpauth input is returned unchanged.
+    if (SettingsProfileLoader::normalizeTotpSecret("web+otpauth://x?secret=Z")
+        != "web+otpauth://x?secret=Z")
+    {
+        qCritical() << "non-otpauth input was modified";
+        return false;
+    }
+
+    return true;
+}
 }
 
 int main(int argc, char *argv[])
@@ -192,5 +230,6 @@ int main(int argc, char *argv[])
     QCoreApplication app(argc, argv);
     return loadsSettingsIntoTypedProfile()
         && usesCompatibleDefaults()
-        && respectsEasyConnectAuthenticationMode() ? 0 : 1;
+        && respectsEasyConnectAuthenticationMode()
+        && normalizesOtpauthTotpSecret() ? 0 : 1;
 }

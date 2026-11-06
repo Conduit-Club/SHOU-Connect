@@ -13,6 +13,7 @@
 #include "infrastructure/storage/applicationpaths.h"
 #include "presentation/presentationhelpers.h"
 #include "infrastructure/settings/profilemanager.h"
+#include "infrastructure/settings/settingsprofileloader.h"
 
 SettingWindow::SettingWindow(QWidget *parent, QSettings *inputSettings, const QString &profileId) :
     QDialog(parent),
@@ -209,14 +210,14 @@ void SettingWindow::loadSettings()
         QString::number(ApplicationConstants::ConfigVersion)
     );
     ui->usernameLineEdit->setText(settings->value("Credential/Username").toString());
-    ui->passwordLineEdit->setText(
-        QByteArray::fromBase64(settings->value("Credential/Password").toString().toUtf8())
-    );
+    ui->passwordLineEdit->setText(QString::fromUtf8(
+        QByteArray::fromBase64(settings->value("Credential/Password").toByteArray())
+    ));
     ui->totpSecretLineEdit->setText(settings->value("Credential/TOTPSecret").toString());
     ui->certFileLineEdit->setText(settings->value("Credential/CertFile").toString());
-    ui->certPasswordLineEdit->setText(
-        QByteArray::fromBase64(settings->value("Credential/CertPassword").toString().toUtf8())
-    );
+    ui->certPasswordLineEdit->setText(QString::fromUtf8(
+        QByteArray::fromBase64(settings->value("Credential/CertPassword").toByteArray())
+    ));
     ui->credentialsAsArgumentsCheckBox->setChecked(
         settings->value("SHOUConnect/CredentialsAsArguments", false).toBool()
     );
@@ -322,7 +323,10 @@ void SettingWindow::applySettings()
 
     settings->setValue("Credential/Username", ui->usernameLineEdit->text());
     settings->setValue("Credential/Password", QString(ui->passwordLineEdit->text().toUtf8().toBase64()));
-    settings->setValue("Credential/TOTPSecret", ui->totpSecretLineEdit->text().trimmed());
+    settings->setValue(
+        "Credential/TOTPSecret",
+        SettingsProfileLoader::normalizeTotpSecret(ui->totpSecretLineEdit->text())
+    );
     settings->setValue("Credential/CertFile", ui->certFileLineEdit->text());
     settings->setValue("Credential/CertPassword", QString(ui->certPasswordLineEdit->text().toUtf8().toBase64()));
     settings->setValue(

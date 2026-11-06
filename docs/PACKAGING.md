@@ -15,4 +15,6 @@
 
 本地可独立运行 `python tests/package_tools_test.py`，使用合成目录验证资源保留、语言裁剪及核心 ZIP 提取。CMake 在找到 Python 3 时也将该测试注册进 CTest。
 
+本地 `build/Release/SHOUConnect.exe` 是未部署的裸可执行文件，旁边没有 Qt 运行库，直接双击会因缺少 `Qt6*.dll` 报系统错误（`0xC0000135`）。本地调试请用 `scripts/deploy-windows.ps1` 生成完整发布目录后启动，或确保 Qt 的 `bin` 目录已加入 `PATH`；发布包必须始终通过部署脚本生成。
+
 发布前需在无 Qt 开发环境的系统验证内嵌登录、验证码、TLS 和非中文系统的英文语言回退；Linux 补测 X11/Wayland，macOS 检查签名。真实 CAS/TOTP 登录需要账号参与，构建通过不能替代这些验证。

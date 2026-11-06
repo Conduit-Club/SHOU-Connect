@@ -6,6 +6,7 @@
 
 class QLabel;
 class QLineEdit;
+class QGroupBox;
 class QPushButton;
 class QRadioButton;
 class QSettings;
@@ -81,6 +82,9 @@ private:
     QRadioButton *certificateAuthenticationRadioButton;
 
     QStackedWidget *credentialPages = nullptr;
+    QGroupBox *casCredentialsGroup;
+    QLabel *casUsernameLabel;
+    QLabel *casPasswordLabel;
     QLineEdit *usernameLineEdit;
     QLineEdit *passwordLineEdit;
     QLineEdit *totpSecretLineEdit;
