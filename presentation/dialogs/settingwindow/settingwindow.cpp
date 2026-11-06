@@ -209,14 +209,14 @@ void SettingWindow::loadSettings()
         QString::number(ApplicationConstants::ConfigVersion)
     );
     ui->usernameLineEdit->setText(settings->value("Credential/Username").toString());
-    ui->passwordLineEdit->setText(
-        QByteArray::fromBase64(settings->value("Credential/Password").toString().toUtf8())
-    );
+    ui->passwordLineEdit->setText(QString::fromUtf8(
+        QByteArray::fromBase64(settings->value("Credential/Password").toByteArray())
+    ));
     ui->totpSecretLineEdit->setText(settings->value("Credential/TOTPSecret").toString());
     ui->certFileLineEdit->setText(settings->value("Credential/CertFile").toString());
-    ui->certPasswordLineEdit->setText(
-        QByteArray::fromBase64(settings->value("Credential/CertPassword").toString().toUtf8())
-    );
+    ui->certPasswordLineEdit->setText(QString::fromUtf8(
+        QByteArray::fromBase64(settings->value("Credential/CertPassword").toByteArray())
+    ));
     ui->credentialsAsArgumentsCheckBox->setChecked(
         settings->value("SHOUConnect/CredentialsAsArguments", false).toBool()
     );
